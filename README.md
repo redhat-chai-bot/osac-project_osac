@@ -1,5 +1,7 @@
 # OSAC
 
+[![API Spec](https://img.shields.io/badge/API_Spec-OpenAPI-6BA539?logo=openapiinitiative&logoColor=white)](https://osac-project.github.io/osac/)
+
 This is the mono-repo for the [Open Sovereign AI Cloud (OSAC)](https://github.com/osac-project)
 project. It hosts multiple components as subdirectories, each retaining its own
 documentation:

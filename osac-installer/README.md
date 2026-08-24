@@ -89,7 +89,7 @@ target Hub cluster.
 | **Storage** | Dynamic storage class available (e.g., `ocs-storagecluster-cephfs`, `lvms-storage`) | Required for persistence of operator and AAP components. |
 | **Permissions** | Cluster-admin access to deploy operators and create CRDs | Limited access users can only deploy into namespaces configured by the admin. |
 | **License Files** | `license.zip` (AAP subscription) | Must be placed in your values directory (e.g., `values/<env>/license.zip`). |
-| **Internet Access** | Outbound access to GitHub (for fetching submodules, releases) | Required during installation and updates. |
+| **Internet Access** | Outbound access to GitHub (for fetching releases) | Required during installation and updates. |
 
 
 ## Installation
@@ -111,15 +111,7 @@ Place the downloaded `license.zip` file in your values directory (e.g., `values/
 
 ### Pre-Installation Steps
 
-#### 1. Initialize Submodules
-
-The OSAC installer uses Git submodules for version tracking:
-
-```bash
-$ git submodule update --init --recursive
-```
-
-#### 2. Populate Local Secrets
+#### 1. Populate Local Secrets
 
 Ensure your values directory contains the necessary secret files:
 
@@ -230,7 +222,7 @@ make uninstall     PLATFORM=... PROFILE=... NS=...  # Full uninstall
 make test          PLATFORM=... PROFILE=... NS=... SUITE=...  # Integration tests
 make helm-lint                                       # Lint all charts
 make helm-validate                                   # Lint + template (full validation)
-make sync-charts         # Update submodules + rebuild dependencies
+make sync-charts         # Rebuild chart dependencies
 ```
 
 ### Monitor Progress

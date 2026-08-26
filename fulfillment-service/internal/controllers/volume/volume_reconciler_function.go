@@ -446,8 +446,8 @@ func (t *task) stampStatus(ctx context.Context, object *osacv1alpha1.Volume) err
 	backend := t.volume.GetStatus().GetBackend()
 	protocol := protoProtocolToCRD(t.volume.GetStatus().GetProtocol())
 
-	if backend == "" && protocol == "" {
-		t.r.logger.WarnContext(ctx, "both backend and protocol are empty in proto source, skipping status stamp (possible tier resolution failure)")
+	if backend == "" || protocol == "" {
+		t.r.logger.WarnContext(ctx, "backend or protocol is empty in proto source, skipping status stamp (incomplete tier resolution)")
 		return nil
 	}
 

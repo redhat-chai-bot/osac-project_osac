@@ -48,6 +48,7 @@ jobs:
               - '!osac-operator/**/*.md'
               - '!osac-operator/docs/**'
               - '!osac-operator/.claude/**'
+              - 'fulfillment-service/proto/private/**'
 
   check-generated-code:
     name: Check generated code (${{ matrix.component }})

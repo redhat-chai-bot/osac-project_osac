@@ -18,6 +18,9 @@ managed:
   override:
   - file_option: go_package_prefix
     value: github.com/osac-project/osac/osac-operator/internal/api
+  - module: buf.build/cleanapi/cleanapi
+    file_option: go_package_prefix
+    value: github.com/osac-project/osac/osac-operator/internal/dummy
   disable:
   - module: buf.build/googleapis/googleapis
   - module: buf.build/grpc-ecosystem/grpc-gateway
@@ -26,6 +29,7 @@ managed:
 inputs:
 
 - directory: ../fulfillment-service/proto/private
+- module: buf.build/cleanapi/cleanapi:v0.0.8
 
 plugins:
 

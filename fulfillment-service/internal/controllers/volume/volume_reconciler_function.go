@@ -26,6 +26,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clnt "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -198,13 +199,7 @@ func (t *task) update(ctx context.Context) error {
 		if err != nil {
 			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
 		}
-		// Populate status.backend/protocol from the resolved private volume so the
-		// operator can select the vendor controller endpoint and protocol on the
-		// first provisioning reconcile, before any vendor round-trip. Status is a
-		// subresource, so it is set with a separate update after Create.
-		newObject.Status.Backend = t.volume.GetStatus().GetBackend()
-		newObject.Status.Protocol = protoProtocolToCRD(t.volume.GetStatus().GetProtocol())
-		if err = t.hubClient.Status().Update(ctx, newObject); err != nil {
+		if err = t.stampStatus(ctx, newObject); err != nil {
 			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
 		}
 		t.r.logger.DebugContext(
@@ -218,6 +213,9 @@ func (t *task) update(ctx context.Context) error {
 		update.Spec = spec
 		err = t.hubClient.Patch(ctx, update, clnt.MergeFrom(object))
 		if err != nil {
+			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
+		}
+		if err = t.stampStatus(ctx, object); err != nil {
 			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
 		}
 		t.r.logger.DebugContext(
@@ -431,6 +429,47 @@ func protoAccessModeToCRD(mode privatev1.VolumeAccessMode) osacv1alpha1.VolumeAc
 	default:
 		return osacv1alpha1.VolumeAccessModeReadWriteOnce
 	}
+}
+
+// statusStampMaxRetries is the number of times stampStatus retries on conflict
+// before giving up and returning the error for a controller-runtime requeue.
+const statusStampMaxRetries = 3
+
+// stampStatus ensures status.backend and status.protocol on the hub Volume CR
+// match the values resolved by tier resolution in the private Volume proto. It
+// is called on both the create and patch-spec branches so that a stamp lost to a
+// concurrent operator write (resourceVersion conflict) is recovered on the next
+// reconcile. On conflict the method re-fetches the CR and retries, avoiding a
+// full reconcile round-trip.
+func (t *task) stampStatus(ctx context.Context, object *osacv1alpha1.Volume) error {
+	backend := t.volume.GetStatus().GetBackend()
+	protocol := protoProtocolToCRD(t.volume.GetStatus().GetProtocol())
+
+	if object.Status.Backend == backend && object.Status.Protocol == protocol {
+		return nil
+	}
+
+	for attempt := range statusStampMaxRetries {
+		object.Status.Backend = backend
+		object.Status.Protocol = protocol
+		err := t.hubClient.Status().Update(ctx, object)
+		if err == nil {
+			return nil
+		}
+		if !apierrors.IsConflict(err) {
+			return err
+		}
+		t.r.logger.DebugContext(ctx, "Status stamp conflict, retrying",
+			slog.Int("attempt", attempt+1),
+		)
+		if err = t.hubClient.Get(ctx, clnt.ObjectKeyFromObject(object), object); err != nil {
+			return err
+		}
+	}
+
+	object.Status.Backend = backend
+	object.Status.Protocol = protocol
+	return t.hubClient.Status().Update(ctx, object)
 }
 
 // protoProtocolToCRD maps the resolved storage protocol from the private Volume

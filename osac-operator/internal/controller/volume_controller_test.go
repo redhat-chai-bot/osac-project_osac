@@ -64,6 +64,16 @@ var _ = Describe("VolumeReconciler", func() {
 		}
 	})
 
+	// stampBackendProtocol simulates the fulfillment-service stamping
+	// status.backend and status.protocol on the Volume CR after creation.
+	stampBackendProtocol := func(v *osacv1alpha1.Volume) {
+		fresh := &osacv1alpha1.Volume{}
+		ExpectWithOffset(1, k8sClient.Get(testCtx, types.NamespacedName{Name: v.Name, Namespace: v.Namespace}, fresh)).To(Succeed())
+		fresh.Status.Backend = "vast-primary"
+		fresh.Status.Protocol = osacv1alpha1.VolumeProtocolBlock
+		ExpectWithOffset(1, k8sClient.Status().Update(testCtx, fresh)).To(Succeed())
+	}
+
 	AfterEach(func() {
 		volKey := types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}
 		existingVol := &osacv1alpha1.Volume{}
@@ -91,6 +101,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 	It("should reach Ready on first reconcile when the mock provisioner succeeds", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
 			Request: reconcile.Request{
@@ -107,6 +118,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 	It("should provision volume and set status fields on success", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		// A single reconcile adds the finalizer and provisions to Ready:
 		// handleUpdate adds the finalizer, then falls through to
@@ -145,6 +157,7 @@ var _ = Describe("VolumeReconciler", func() {
 		mockProv.CreateErr = fmt.Errorf("vendor array unreachable")
 
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		// A single reconcile adds the finalizer and attempts provisioning,
 		// which fails and transitions the phase to Failed (no error returned;
@@ -172,6 +185,7 @@ var _ = Describe("VolumeReconciler", func() {
 		mockProv.CreateErr = fmt.Errorf("vendor array unreachable")
 
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		// First reconcile provisions, fails, and lands in Failed.
 		_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
@@ -203,6 +217,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 	It("should not re-provision when already Ready", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		// Reconcile until Ready
 		for range 3 {
@@ -228,6 +243,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 	It("should handle deletion with vendor deprovisioning", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		// Reconcile to Ready
 		for range 3 {
@@ -258,6 +274,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 	It("should return error and keep finalizer when vendor deprovisioning fails", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		// Reconcile to Ready
 		for range 3 {
@@ -291,6 +308,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 	It("should keep finalizer when provisioned but no VendorProvisioner is configured", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		// Reconcile to Ready so the volume has a VendorVolumeID.
 		for range 3 {
@@ -357,6 +375,7 @@ var _ = Describe("VolumeReconciler", func() {
 	It("should pass tenant, backend, and vendor volume ID through to the vendor delete request", func() {
 		vol.Annotations = map[string]string{osacTenantKey: "acme"}
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		// Reconcile to Ready so the volume has a VendorVolumeID and backend.
 		for range 3 {
@@ -445,6 +464,80 @@ var _ = Describe("VolumeReconciler", func() {
 			},
 		})
 		Expect(err).ToNot(HaveOccurred())
+	})
+
+	It("should requeue without writing status when backend is empty", func() {
+		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+
+		// First reconcile adds finalizer and sets phase to Progressing, but
+		// backend/protocol are empty so it should requeue instead of calling
+		// the vendor provisioner.
+		res, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
+			Request: reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res.RequeueAfter).To(BeNumerically(">", 0))
+
+		updated := &osacv1alpha1.Volume{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(osacv1alpha1.VolumePhaseProgressing))
+		Expect(mockProv.CreateCallCount()).To(Equal(int64(0)))
+	})
+
+	It("should requeue without writing status when protocol is empty", func() {
+		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+
+		// Stamp only backend, leave protocol empty.
+		vol.Status.Backend = "vast-primary"
+		Expect(k8sClient.Status().Update(testCtx, vol)).To(Succeed())
+
+		res, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
+			Request: reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res.RequeueAfter).To(BeNumerically(">", 0))
+
+		updated := &osacv1alpha1.Volume{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(osacv1alpha1.VolumePhaseProgressing))
+		Expect(mockProv.CreateCallCount()).To(Equal(int64(0)))
+	})
+
+	It("should provision once backend and protocol are populated", func() {
+		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+
+		// First reconcile: backend/protocol empty → requeue.
+		res, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
+			Request: reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(res.RequeueAfter).To(BeNumerically(">", 0))
+		Expect(mockProv.CreateCallCount()).To(Equal(int64(0)))
+
+		// Simulate FS stamping backend/protocol.
+		updated := &osacv1alpha1.Volume{}
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, updated)).To(Succeed())
+		updated.Status.Backend = "vast-primary"
+		updated.Status.Protocol = osacv1alpha1.VolumeProtocolBlock
+		Expect(k8sClient.Status().Update(testCtx, updated)).To(Succeed())
+
+		// Second reconcile: backend/protocol present → provisions.
+		_, err = reconciler.Reconcile(testCtx, mcreconcile.Request{
+			Request: reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(mockProv.CreateCallCount()).To(BeNumerically(">=", 1))
+
+		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, updated)).To(Succeed())
+		Expect(updated.Status.Phase).To(Equal(osacv1alpha1.VolumePhaseReady))
 	})
 
 })

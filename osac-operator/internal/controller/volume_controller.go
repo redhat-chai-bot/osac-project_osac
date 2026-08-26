@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -218,6 +219,16 @@ func (r *VolumeReconciler) handleProvisioning(ctx context.Context, vol *v1alpha1
 		log.Info("no vendor provisioner configured; leaving volume in Progressing (provisioning skipped)")
 		vol.Status.Phase = v1alpha1.VolumePhaseProgressing
 		return ctrl.Result{}, nil
+	}
+
+	// Backend and protocol are stamped by the fulfillment-service in a separate
+	// Status().Update() after it creates the Volume CR. If the operator reconciles
+	// before that stamp lands, these fields are empty. Requeue WITHOUT writing
+	// status (no phase change) to avoid clobbering FS's concurrent stamp with a
+	// resourceVersion bump.
+	if vol.Status.Backend == "" || vol.Status.Protocol == "" {
+		log.Info("backend/protocol not yet populated by fulfillment-service, requeueing")
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
 	resp, err := r.VendorProvisioner.CreateVolume(ctx, VendorCreateVolumeRequest{

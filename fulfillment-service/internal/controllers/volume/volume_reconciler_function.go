@@ -202,10 +202,28 @@ func (t *task) update(ctx context.Context) error {
 		// operator can select the vendor controller endpoint and protocol on the
 		// first provisioning reconcile, before any vendor round-trip. Status is a
 		// subresource, so it is set with a separate update after Create.
-		newObject.Status.Backend = t.volume.GetStatus().GetBackend()
-		newObject.Status.Protocol = protoProtocolToCRD(t.volume.GetStatus().GetProtocol())
-		if err = t.hubClient.Status().Update(ctx, newObject); err != nil {
-			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
+		//
+		// If either source value is empty, skip the stamp — something upstream
+		// (tier resolution) hasn't populated the field yet. The operator guard
+		// uses the same either-empty check (||) and will requeue until both are
+		// present, so stamping incomplete data would only cause a wasted
+		// status-update round-trip.
+		backend := t.volume.GetStatus().GetBackend()
+		protocol := protoProtocolToCRD(t.volume.GetStatus().GetProtocol())
+		if backend == "" || protocol == "" {
+			t.r.logger.WarnContext(
+				ctx,
+				"Skipping status stamp: backend or protocol not yet resolved",
+				slog.String("backend", backend),
+				slog.String("protocol", string(protocol)),
+				slog.String("volume_id", t.volume.GetId()),
+			)
+		} else {
+			newObject.Status.Backend = backend
+			newObject.Status.Protocol = protocol
+			if err = t.hubClient.Status().Update(ctx, newObject); err != nil {
+				return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
+			}
 		}
 		t.r.logger.DebugContext(
 			ctx,

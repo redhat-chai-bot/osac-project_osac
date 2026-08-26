@@ -174,10 +174,22 @@ func (r *VolumeReconciler) Reconcile(ctx context.Context, req mcreconcile.Reques
 // is present, sets the initial phase to Progressing, and delegates to
 // handleProvisioning if the volume has not yet reached Ready.
 func (r *VolumeReconciler) handleUpdate(ctx context.Context, vol *v1alpha1.Volume) (ctrl.Result, error) {
+	log := ctrllog.FromContext(ctx)
+
 	if controllerutil.AddFinalizer(vol, osacVolumeFinalizer) {
 		if err := r.Update(ctx, vol); err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+
+	// Backend and protocol are stamped by the fulfillment-service in a separate
+	// Status().Update() after it creates the Volume CR. If the operator reconciles
+	// before that stamp lands, these fields are empty. Requeue WITHOUT writing
+	// status (no phase change) to avoid clobbering FS's concurrent stamp with a
+	// resourceVersion bump.
+	if vol.Status.Backend == "" || vol.Status.Protocol == "" {
+		log.Info("backend/protocol not yet populated by fulfillment-service, requeueing")
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
 	if vol.Status.Phase == "" {
@@ -219,16 +231,6 @@ func (r *VolumeReconciler) handleProvisioning(ctx context.Context, vol *v1alpha1
 		log.Info("no vendor provisioner configured; leaving volume in Progressing (provisioning skipped)")
 		vol.Status.Phase = v1alpha1.VolumePhaseProgressing
 		return ctrl.Result{}, nil
-	}
-
-	// Backend and protocol are stamped by the fulfillment-service in a separate
-	// Status().Update() after it creates the Volume CR. If the operator reconciles
-	// before that stamp lands, these fields are empty. Requeue WITHOUT writing
-	// status (no phase change) to avoid clobbering FS's concurrent stamp with a
-	// resourceVersion bump.
-	if vol.Status.Backend == "" || vol.Status.Protocol == "" {
-		log.Info("backend/protocol not yet populated by fulfillment-service, requeueing")
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
 	}
 
 	resp, err := r.VendorProvisioner.CreateVolume(ctx, VendorCreateVolumeRequest{

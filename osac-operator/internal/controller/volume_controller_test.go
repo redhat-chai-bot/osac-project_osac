@@ -414,6 +414,7 @@ var _ = Describe("VolumeReconciler", func() {
 		reconciler.VendorProvisioner = nil
 
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 
 		for range 2 {
 			_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
@@ -437,6 +438,7 @@ var _ = Describe("VolumeReconciler", func() {
 		reconciler.VendorProvisioner = nil
 
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
+		stampBackendProtocol(vol)
 		_, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
 			Request: reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
@@ -469,9 +471,8 @@ var _ = Describe("VolumeReconciler", func() {
 	It("should requeue without writing status when backend is empty", func() {
 		Expect(k8sClient.Create(testCtx, vol)).To(Succeed())
 
-		// First reconcile adds finalizer and sets phase to Progressing, but
-		// backend/protocol are empty so it should requeue instead of calling
-		// the vendor provisioner.
+		// First reconcile adds finalizer but backend/protocol are empty so it
+		// should requeue without setting Phase — no status mutations at all.
 		res, err := reconciler.Reconcile(testCtx, mcreconcile.Request{
 			Request: reconcile.Request{
 				NamespacedName: types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace},
@@ -482,7 +483,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 		updated := &osacv1alpha1.Volume{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, updated)).To(Succeed())
-		Expect(updated.Status.Phase).To(Equal(osacv1alpha1.VolumePhaseProgressing))
+		Expect(updated.Status.Phase).To(BeEmpty())
 		Expect(mockProv.CreateCallCount()).To(Equal(int64(0)))
 	})
 
@@ -503,7 +504,7 @@ var _ = Describe("VolumeReconciler", func() {
 
 		updated := &osacv1alpha1.Volume{}
 		Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: vol.Name, Namespace: vol.Namespace}, updated)).To(Succeed())
-		Expect(updated.Status.Phase).To(Equal(osacv1alpha1.VolumePhaseProgressing))
+		Expect(updated.Status.Phase).To(BeEmpty())
 		Expect(mockProv.CreateCallCount()).To(Equal(int64(0)))
 	})
 

@@ -215,7 +215,7 @@ func (t *task) update(ctx context.Context) error {
 		if err != nil {
 			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
 		}
-		if err = t.stampStatus(ctx, object); err != nil {
+		if err = t.stampStatus(ctx, update); err != nil {
 			return controllers.HandleK8sWriteError(ctx, t.r.logger, err, t.setFailed)
 		}
 		t.r.logger.DebugContext(

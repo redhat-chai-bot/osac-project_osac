@@ -44,6 +44,11 @@ import (
 // (which holds identifiers shared with the feedback controller).
 const osacVolumeFinalizer = "osac.openshift.io/volume-finalizer"
 
+// statusStampPollInterval is the requeue delay when backend/protocol have not
+// yet been stamped by the fulfillment-service. Kept short because the stamp
+// typically lands within a second of CR creation.
+const statusStampPollInterval = 2 * time.Second
+
 // VendorProvisioner abstracts vendor storage array operations. Unlike other
 // OSAC resources that provision through AAP (RunProvisioningLifecycle), volumes
 // are provisioned by calling the vendor CSI controller directly. This interface
@@ -189,7 +194,7 @@ func (r *VolumeReconciler) handleUpdate(ctx context.Context, vol *v1alpha1.Volum
 	// resourceVersion bump.
 	if vol.Status.Backend == "" || vol.Status.Protocol == "" {
 		log.Info("backend/protocol not yet populated by fulfillment-service, requeueing")
-		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: statusStampPollInterval}, nil
 	}
 
 	if vol.Status.Phase == "" {

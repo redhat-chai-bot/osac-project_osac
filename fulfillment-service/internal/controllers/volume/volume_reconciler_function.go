@@ -431,9 +431,10 @@ func protoAccessModeToCRD(mode privatev1.VolumeAccessMode) osacv1alpha1.VolumeAc
 	}
 }
 
-// statusStampMaxRetries is the number of times stampStatus retries on conflict
-// before giving up and returning the error for a controller-runtime requeue.
-const statusStampMaxRetries = 3
+// statusStampMaxAttempts is the total number of Status().Update() attempts
+// stampStatus makes before giving up and returning the error for a
+// controller-runtime requeue.
+const statusStampMaxAttempts = 4
 
 // stampStatus ensures status.backend and status.protocol on the hub Volume CR
 // match the values resolved by tier resolution in the private Volume proto. It
@@ -445,31 +446,36 @@ func (t *task) stampStatus(ctx context.Context, object *osacv1alpha1.Volume) err
 	backend := t.volume.GetStatus().GetBackend()
 	protocol := protoProtocolToCRD(t.volume.GetStatus().GetProtocol())
 
+	if backend == "" && protocol == "" {
+		t.r.logger.WarnContext(ctx, "both backend and protocol are empty in proto source, skipping status stamp (possible tier resolution failure)")
+		return nil
+	}
+
 	if object.Status.Backend == backend && object.Status.Protocol == protocol {
 		return nil
 	}
 
-	for attempt := range statusStampMaxRetries {
+	var lastErr error
+	for attempt := range statusStampMaxAttempts {
 		object.Status.Backend = backend
 		object.Status.Protocol = protocol
-		err := t.hubClient.Status().Update(ctx, object)
-		if err == nil {
+		lastErr = t.hubClient.Status().Update(ctx, object)
+		if lastErr == nil {
 			return nil
 		}
-		if !apierrors.IsConflict(err) {
-			return err
+		if !apierrors.IsConflict(lastErr) {
+			return lastErr
 		}
-		t.r.logger.DebugContext(ctx, "Status stamp conflict, retrying",
-			slog.Int("attempt", attempt+1),
-		)
-		if err = t.hubClient.Get(ctx, clnt.ObjectKeyFromObject(object), object); err != nil {
-			return err
+		if attempt < statusStampMaxAttempts-1 {
+			t.r.logger.DebugContext(ctx, "Status stamp conflict, retrying",
+				slog.Int("attempt", attempt+1),
+			)
+			if err := t.hubClient.Get(ctx, clnt.ObjectKeyFromObject(object), object); err != nil {
+				return err
+			}
 		}
 	}
-
-	object.Status.Backend = backend
-	object.Status.Protocol = protocol
-	return t.hubClient.Status().Update(ctx, object)
+	return lastErr
 }
 
 // protoProtocolToCRD maps the resolved storage protocol from the private Volume

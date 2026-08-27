@@ -557,15 +557,27 @@ The authorization policy distinguishes between the following subject categories:
    - **Admin groups**: Users belonging to admin groups (e.g., the `admins` group)
 
 2. **Tenant Admin Subjects**: Users with the `tenant-admin` realm role.
-   They inherit all client permissions **plus** access to user management methods
-   (`Users/Create`, `Users/Get`, `Users/List`, `Users/Update`, `Users/Delete`) and IdP management
-   methods (`IdentityProviders/Create`, `Get`, `List`, `Update`, `Delete`).
+   They inherit all client permissions **plus** access to user management
+   (`Users/Create`, `Get`, `List`, `Update`, `Delete`), IdP management
+   (`IdentityProviders/Create`, `Get`, `List`, `Update`, `Delete`), catalog item management
+   (`BareMetalInstanceCatalogItems`, `ClusterCatalogItems`, `ComputeInstanceCatalogItems`:
+   `Create`, `Update`, `Delete`), project management
+   (`Projects` and `ProjectMemberships`: `Create`, `Get`, `List`, `Update`, `Delete`),
+   and role assignment (`Roles/Get`, `List`, `RoleBindings/Create`, `Get`, `List`, `Update`,
+   `Delete`).
 
 3. **Tenant IdP Manager Subjects**: Users with the `tenant-idp-manager` realm role.
-   They inherit all client permissions **plus** access to IdP management methods
-   (`IdentityProviders/Create`, `Get`, `List`, `Update`, `Delete`). They cannot manage users.
+   They inherit all client permissions **plus** access to IdP management
+   (`IdentityProviders/Create`, `Get`, `List`, `Update`, `Delete`), read-only user access
+   (`Users/Get`, `List`), and role assignment (`Roles/Get`, `List`,
+   `RoleBindings/Create`, `Get`, `List`, `Update`, `Delete`). They cannot create, update,
+   or delete users (unlike tenant admins).
 
-4. **Client Subjects**: All other authenticated users (JWT tokens from Keycloak that are not admin, tenant-admin, or tenant-idp-manager).
+4. **CSI Driver Subjects**: Service accounts with the `osac-csi-driver` Keycloak realm role.
+   They have access only to the private Volume API (`Volumes/Create`, `Get`, `Delete`, `List`).
+   They are not regular clients and cannot access any public API methods.
+
+5. **Client Subjects**: All other authenticated users (JWT tokens from Keycloak that are not admin, tenant-admin, tenant-idp-manager, or CSI driver).
 
 ### Authorization Logic
 
@@ -578,30 +590,58 @@ The authorization policy allows:
 
 2. **Client Users** (and tenant admins / IdP managers who inherit client permissions):
    - Specific gRPC methods for:
+     - Bare Metal Instances: `Create`, `Delete`, `Get`, `List`, `Update`
+     - Bare Metal Instance Catalog Items: `Get`, `List`
+     - Bare Metal Instance Templates: `Get`, `List`
+     - Bare Metal Instance Types: `Get`, `List`
      - Clusters: `Create`, `Delete`, `Get`, `GetKubeconfig`,
        `GetKubeconfigViaHttp`, `GetPassword`,
        `GetPasswordViaHttp`, `List`, `Update`
-     - Cluster Templates: `Get`, `List`
      - Cluster Catalog Items: `Get`, `List`
+     - Cluster Templates: `Get`, `List`
+     - Cluster Versions: `Get`, `List`
      - Compute Instances: `Create`, `Delete`, `Get`, `List`, `Update`
+     - Compute Instance Catalog Items: `Get`, `List`
      - Compute Instance Templates: `Get`, `List`
-     - Disk Images: `Create`, `Delete`, `Get`, `List`, `Update`
      - Console Sessions: `Create`
+     - Disk Images: `Create`, `Delete`, `Get`, `List`, `Update`
      - Events: `Watch`
-     - Host Types: `Get`, `List`
-     - Network Classes: `Create`, `Delete`, `Get`, `List`, `Update`
      - External IP Attachments: `Create`, `Delete`, `Get`, `List`, `Update`
+     - External IP Pools: `Get`, `List`
      - External IPs: `Create`, `Delete`, `Get`, `List`, `Update`
-     - Role Bindings: `Get`, `List`
+     - Host Types: `Get`, `List`
+     - Instance Types: `Get`, `List`
+     - NAT Gateways: `Create`, `Delete`, `Get`, `List`, `Update`
+     - Projects: `List`
+     - Project Memberships: `List`
      - Roles: `Get`, `List`
+     - Role Bindings: `Get`, `List`
+     - Secrets: `Create`, `Delete`, `Get`, `List`, `Update`
      - Security Groups: `Create`, `Delete`, `Get`, `List`, `Update`
      - Subnets: `Create`, `Delete`, `Get`, `List`, `Update`
      - Virtual Networks: `Create`, `Delete`, `Get`, `List`, `Update`
 
 3. **Tenant Admins** (in addition to client permissions):
+   - Bare Metal Instance Catalog Items: `Create`, `Update`, `Delete`
+   - Cluster Catalog Items: `Create`, `Update`, `Delete`
+   - Compute Instance Catalog Items: `Create`, `Update`, `Delete`
+   - Identity Providers: `Create`, `Get`, `List`, `Update`, `Delete`
    - Users: `Create`, `Get`, `List`, `Update`, `Delete`
+   - Projects: `Create`, `Get`, `List`, `Update`, `Delete`
+   - Project Memberships: `Create`, `Get`, `List`, `Update`, `Delete`
+   - Roles: `Get`, `List`
+   - Role Bindings: `Create`, `Get`, `List`, `Update`, `Delete`
 
-4. **Admin Users**:
+4. **Tenant IdP Managers** (in addition to client permissions):
+   - Identity Providers: `Create`, `Get`, `List`, `Update`, `Delete`
+   - Users: `Get`, `List`
+   - Roles: `Get`, `List`
+   - Role Bindings: `Create`, `Get`, `List`, `Update`, `Delete`
+
+5. **CSI Driver** (private Volume API only):
+   - Volumes: `Create`, `Get`, `Delete`, `List`
+
+6. **Admin Users**:
    - All methods (full access)
 
 ### Authorization Levels
@@ -629,8 +669,10 @@ The fulfillment service implements a comprehensive authorization model that comb
 - All client-level permissions (inherits from `has_client_permissions`)
 - User management (Create/Get/List/Update/Delete users within their tenant)
 - IdP management (Full CRUD on IdentityProviders within their tenant)
-- Bare-metal catalog item management (Create/Update/Delete tenant-scoped catalog items)
-- Project creation
+- Catalog item management (Create/Update/Delete on BareMetalInstanceCatalogItems, ClusterCatalogItems, and ComputeInstanceCatalogItems)
+- Project management (Full CRUD on Projects within their tenant)
+- Project membership management (Full CRUD on ProjectMemberships within their tenant)
+- Role assignment (Get/List Roles, Full CRUD on RoleBindings within their tenant)
 
 **Note:** Tenant admins can manage both users AND IdP configuration.
 
@@ -643,8 +685,21 @@ The fulfillment service implements a comprehensive authorization model that comb
 **Permissions:**
 - All client-level permissions (inherits from `has_client_permissions`)
 - IdP management (Full CRUD on IdentityProviders within their tenant)
+- Read-only user access (Get/List Users within their tenant)
+- Role assignment (Get/List Roles, Full CRUD on RoleBindings within their tenant)
 
-**Note:** Tenant IdP managers can ONLY manage IdP configuration, NOT users (unlike tenant admins).
+**Note:** Tenant IdP managers can manage IdP configuration and assign roles, but cannot create, update, or delete users (unlike tenant admins).
+
+#### 3b. CSI Driver (`is_csi`)
+
+**Who qualifies:** Service accounts with realm role: `osac-csi-driver`
+
+**Tenancy:** Uses organization claim from token; currently has temporary universal tenant scope (`*`) because the CSI driver authenticates with a single shared client that has no per-tenant organization claim (OSAC-4109). The tenant a volume belongs to is carried on the request (`metadata.tenant`) rather than enforced by identity. This will be resolved when per-tenant `osac-csi-driver-<tenant>` clients are implemented (OSAC-4197).
+
+**Permissions:**
+- Private Volume API only (Create/Get/Delete/List via `osac.private.v1.Volumes`)
+
+**Note:** The CSI driver is a restricted identity — not an admin and not a general client. It may only manage volumes through the private Volume API. Authorization keys on the realm role rather than the username to prevent ordinary users from obtaining CSI permissions by choosing a matching username.
 
 #### 4. Project Manager
 
@@ -674,13 +729,14 @@ The fulfillment service implements a comprehensive authorization model that comb
 **Tenancy:** Scoped to their assigned tenant(s) + shared tenant
 
 **Permissions:** Read/write access to infrastructure resources:
-- Bare-metal instances, clusters, compute instances, disk images
-- Networking (virtual networks, subnets, security groups)
-- IPs (external IPs and their attachments/pools)
-- Templates and catalog items (read-only)
-- Console sessions, events, host types, instance types
+- Bare-metal instances, clusters, compute instances, disk images, secrets
+- Networking (virtual networks, subnets, security groups, NAT gateways)
+- IPs (external IPs and their attachments; external IP pools are read-only)
+- Templates and catalog items (read-only: cluster templates, cluster versions, bare-metal instance templates/types/catalog items, compute instance templates/catalog items, instance types)
+- Console sessions, events, host types
 - Roles and role bindings (read-only)
 - Projects (List only, with results filtered by membership)
+- Project memberships (List only, with results filtered by membership)
 
 #### 7. Guest
 
@@ -717,8 +773,13 @@ The JIT provisioning interceptor (`grpc_jit_provisioning_interceptor.go`) runs a
 - **Group Hierarchy:** Projects create Keycloak groups `/<project-name>/system:viewers` and `/<project-name>/system:managers`
 - **Group Management:** Tenant admins can create projects, which triggers group creation in Keycloak via the `ProjectGroupManager`
 - **Group Membership:** Users added to project groups get viewer or manager permissions
-- **OPA Enforcement:** Project Get/Update/Delete methods check organization groups in JWT claims
-- **Application-Layer Filtering:** Project List filters results based on actual group memberships
+- **OPA Enforcement:**
+  - Project List: available to all clients (application layer filters results based on actual group memberships)
+  - Project Get: restricted to project viewers or managers (group-based via organization groups in JWT claims)
+  - Project Update/Delete: restricted to project managers only (group-based via organization groups in JWT claims)
+  - ProjectMemberships List: available to all clients (application layer filters results)
+  - ProjectMemberships Create: restricted to project managers (checks manager group across the user's tenants)
+  - ProjectMemberships Get/Update/Delete: restricted to project managers (uses DB-authoritative tenant and project context)
 
 #### Special Cases
 
@@ -886,17 +947,27 @@ reads roles from the `realm_access.roles` claim in JWT tokens.
 
 2. **Tenant Admin Users**:
    - Users with the `tenant-admin` realm role
-   - Have all client permissions plus user management (`Users/Create`, `Get`, `List`, `Update`, `Delete`)
-     and IdP management (`IdentityProviders/Create`, `Get`, `List`, `Update`, `Delete`)
-   - Access is restricted by tenancy (can only manage users and IdP within their tenants)
+   - Have all client permissions plus user management (`Users` CRUD),
+     IdP management (`IdentityProviders` CRUD), catalog item management
+     (`BareMetalInstanceCatalogItems`, `ClusterCatalogItems`, `ComputeInstanceCatalogItems`:
+     `Create`, `Update`, `Delete`), project management (`Projects` and `ProjectMemberships` CRUD),
+     and role assignment (`Roles` read, `RoleBindings` CRUD)
+   - Access is restricted by tenancy (can only manage resources within their tenants)
 
 3. **Tenant IdP Manager Users**:
    - Users with the `tenant-idp-manager` realm role
-   - Have all client permissions plus IdP management (`IdentityProviders/Create`, `Get`, `List`, `Update`, `Delete`)
-   - Cannot manage users (unlike tenant admins)
-   - Access is restricted by tenancy (can only manage IdP within their tenants)
+   - Have all client permissions plus IdP management (`IdentityProviders` CRUD),
+     read-only user access (`Users/Get`, `List`), and role assignment
+     (`Roles` read, `RoleBindings` CRUD)
+   - Cannot create, update, or delete users (unlike tenant admins)
+   - Access is restricted by tenancy (can only manage resources within their tenants)
 
-4. **Client Users**:
+4. **CSI Driver**:
+   - Service accounts with the `osac-csi-driver` realm role
+   - Access limited to private Volume API only (`Volumes/Create`, `Get`, `Delete`, `List`)
+   - Not a regular client — cannot access any public API methods
+
+5. **Client Users**:
    - All other authenticated users
    - Have access to a specific list of operations (defined in the Rego policy)
    - Access is further restricted by tenancy (can only see resources from their tenants)

@@ -153,6 +153,8 @@ jobs:
       # Checkout osac-test-infra for tests/Containerfile (not the caller repo)
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      # Pull e2e tests from this PR's commit so test changes are exercised
+      test-ref: ${{ github.event.pull_request.head.sha || github.sha }}
       # CaaS-specific inputs (cluster-template, caas-domain, flavor-image,
       # flavor-name, namespace, etc.) are left at the reusable workflow's own
       # defaults -- none are required and this caller has no need to override

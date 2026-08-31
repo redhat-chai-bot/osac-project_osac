@@ -142,6 +142,8 @@ jobs:
       # Checkout osac-test-infra for tests/Containerfile (not the caller repo)
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      # Pull e2e tests from this PR's commit so test changes are exercised
+      test-ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
   e2e-bmaas-gate:
     if: always()

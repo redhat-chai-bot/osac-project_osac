@@ -139,9 +139,11 @@ jobs:
       fork-pr-author-association: ${{ github.event.pull_request.head.repo.fork && github.event.pull_request.author_association || '' }}
       fork-pr-author: ${{ github.event.pull_request.head.repo.fork && github.event.pull_request.user.login || '' }}
       pr-number: ${{ github.event.pull_request.number }}
-      # Checkout osac-test-infra for tests/Containerfile (not the caller repo)
+      # Checkout osac-test-infra for Containerfile/scripts (not the caller repo)
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      # Checkout osac mono-repo at this PR's commit for test code (tests/ and pyproject.toml)
+      test-ref: ${{ github.sha }}
 
   e2e-bmaas-gate:
     if: always()

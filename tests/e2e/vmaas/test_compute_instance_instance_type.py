@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from tests.catalog.conftest import unique_name
+from tests.e2e.catalog.conftest import unique_name
 from tests.core.grpc_client import GRPCClient
 from tests.core.helpers import wait_for_cr, wait_for_deletion
 from tests.core.k8s_client import K8sClient

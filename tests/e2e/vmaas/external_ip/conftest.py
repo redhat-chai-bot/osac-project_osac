@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pytest
 
-from tests.catalog.conftest import unique_name
+from tests.e2e.catalog.conftest import unique_name
 from tests.core.grpc_client import GRPCClient
 from tests.core.helpers import (
     wait_for_cr,
@@ -22,7 +22,7 @@ from tests.core.helpers import (
 )
 from tests.core.k8s_client import K8sClient
 from tests.core.osac_cli import OsacCLI
-from tests.vmaas.external_ip.helpers import allocate_worker_subnet, create_ip
+from tests.e2e.vmaas.external_ip.helpers import allocate_worker_subnet, create_ip
 
 logger = logging.getLogger(__name__)
 

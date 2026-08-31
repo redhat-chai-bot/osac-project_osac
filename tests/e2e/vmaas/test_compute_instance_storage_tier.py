@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from tests.catalog.conftest import unique_name
+from tests.e2e.catalog.conftest import unique_name
 from tests.core.grpc_client import GRPCClient
 from tests.core.helpers import (
     assert_grpc_rejected,
@@ -438,7 +438,7 @@ def test_compute_instance_boot_disk_tier_from_template_default() -> None:
     is written verbatim into the CR and used by AAP as the role name to include
     (playbook_osac_create_compute_instance.yml), and only AAP-published templates have a backing
     role, so the CI can neither provision nor delete. This constraint is documented on the sibling
-    test tests/vmaas/test_compute_instance_disk_image.py::test_template_disk_image_default, which
+    test tests/e2e/vmaas/test_compute_instance_disk_image.py::test_template_disk_image_default, which
     hit the same limitation and works around it by asserting on the template object only.
     """
 

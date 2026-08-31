@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
-from tests.catalog.conftest import unique_name
+from tests.e2e.catalog.conftest import unique_name
 from tests.core.grpc_client import GRPCClient
 from tests.core.helpers import wait_for_cluster_order_cr
 from tests.core.k8s_client import K8sClient

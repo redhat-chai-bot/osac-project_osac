@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from tests.catalog.conftest import unique_name
+from tests.e2e.catalog.conftest import unique_name
 
 from tests.core.grpc_client import GRPCClient
 from tests.core.helpers import wait_for_cr, wait_for_deletion, wait_for_restart, wait_for_running

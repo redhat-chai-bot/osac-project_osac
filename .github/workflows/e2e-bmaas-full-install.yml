@@ -142,6 +142,9 @@ jobs:
       # Checkout osac-test-infra for tests/Containerfile (not the caller repo)
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
+      # OSAC-3593: Use tests from osac mono-repo instead of osac-test-infra
+      test-source: "osac"
+      test-ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
   e2e-bmaas-gate:
     if: always()

@@ -523,6 +523,8 @@ jobs:
       installer-ref: ${{ needs.prepare.outputs.temp-branch }}
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: main
+      test-source: osac
+      test-ref: ${{ needs.prepare.outputs.temp-branch }}
 
   e2e-caas-test:
     name: E2E validation (caas)
@@ -537,6 +539,8 @@ jobs:
       installer-ref: ${{ needs.prepare.outputs.temp-branch }}
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: main
+      test-source: osac
+      test-ref: ${{ needs.prepare.outputs.temp-branch }}
 
   e2e-bmaas-test:
     name: E2E validation (bmaas)
@@ -551,6 +555,8 @@ jobs:
       installer-ref: ${{ needs.prepare.outputs.temp-branch }}
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: main
+      test-source: osac
+      test-ref: ${{ needs.prepare.outputs.temp-branch }}
 
   # -------------------------------------------------------------------
   # Job 5: Publish — promote every image from its provisional sha-<short>

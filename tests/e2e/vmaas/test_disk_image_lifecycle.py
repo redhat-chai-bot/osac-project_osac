@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import assert_grpc_rejected
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import assert_grpc_rejected
 
 SOURCE_REF = "quay.io/containerdisks/fedora:41"
 

@@ -6,15 +6,15 @@ import uuid
 
 import pytest
 
-from tests.core.grpc_client import PUBLIC_API, GRPCClient
-from tests.core.helpers import (
+from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
+from tests.e2e.core.helpers import (
     assert_grpc_rejected,
     wait_for_virtual_network_cr,
     wait_for_virtual_network_deletion,
     wait_for_virtual_network_ready,
 )
-from tests.core.k8s_client import K8sClient
-from tests.core.runner import poll_until
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.runner import poll_until
 
 
 def _grpc_error_message(exc: subprocess.CalledProcessError) -> str:

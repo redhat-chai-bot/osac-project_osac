@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from tests.e2e.catalog.conftest import unique_name
-from tests.core.grpc_client import GRPCClient
-from tests.core.runner import poll_until
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.runner import poll_until
 
 
 def test_compute_instance_catalog_item_crud(grpc: GRPCClient, compute_instance_template: str) -> None:

@@ -4,8 +4,8 @@ import subprocess
 from typing import Any
 from uuid import uuid4
 
-from tests.core.grpc_client import GRPCClient, PRIVATE_API
-from tests.core.osac_cli import OsacCLI
+from tests.e2e.core.grpc_client import GRPCClient, PRIVATE_API
+from tests.e2e.core.osac_cli import OsacCLI
 
 TEST_CORES: int = 4
 TEST_MEMORY_GIB: int = 8

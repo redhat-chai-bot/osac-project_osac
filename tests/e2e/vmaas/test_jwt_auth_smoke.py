@@ -5,9 +5,9 @@ from uuid import uuid4
 
 import pytest
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.osac_cli import OsacCLI
-from tests.core.runner import run_unchecked
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.osac_cli import OsacCLI
+from tests.e2e.core.runner import run_unchecked
 
 CLIENT_LISTABLE_RESOURCES = [
     "clustertemplates",

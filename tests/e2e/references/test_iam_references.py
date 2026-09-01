@@ -8,9 +8,9 @@ from uuid import uuid4
 
 import pytest
 
-from tests.core.grpc_client import PUBLIC_API, GRPCClient
-from tests.core.helpers import assert_grpc_field_violation
-from tests.core.osac_cli import OsacCLI
+from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
+from tests.e2e.core.helpers import assert_grpc_field_violation
+from tests.e2e.core.osac_cli import OsacCLI
 
 logger = logging.getLogger(__name__)
 

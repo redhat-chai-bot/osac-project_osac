@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from tests.core.runner import poll_until, run_unchecked
+from tests.e2e.core.runner import poll_until, run_unchecked
 
 
 def get_jwt(*, keycloak_url: str, realm: str, client_id: str, username: str, password: str) -> str:

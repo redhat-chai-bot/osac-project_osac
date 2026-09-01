@@ -9,8 +9,8 @@ from uuid import uuid4
 
 import pytest
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.keycloak_admin import (
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.keycloak_admin import (
     get_admin_token,
     wait_for_organization,
     wait_for_project_in_keycloak,

@@ -3,11 +3,11 @@ from __future__ import annotations
 import subprocess
 
 from tests.e2e.catalog.conftest import unique_name
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import wait_for_cluster_order_cr
-from tests.core.k8s_client import K8sClient
-from tests.core.osac_cli import OsacCLI
-from tests.core.runner import poll_until
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import wait_for_cluster_order_cr
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.osac_cli import OsacCLI
+from tests.e2e.core.runner import poll_until
 
 # Fixed (not randomly generated) so repeated runs reuse the same ClusterVersion
 # via GRPCClient.ensure_cluster_version instead of accumulating duplicates on

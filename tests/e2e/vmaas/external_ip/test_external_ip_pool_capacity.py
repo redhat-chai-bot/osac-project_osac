@@ -5,10 +5,10 @@ from uuid import uuid4
 
 import pytest
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import assert_grpc_rejected, wait_for_external_ip_pool_deletion
-from tests.core.k8s_client import K8sClient
-from tests.core.runner import poll_until
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import assert_grpc_rejected, wait_for_external_ip_pool_deletion
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.runner import poll_until
 from tests.e2e.vmaas.external_ip.helpers import create_ip, delete_ip, pool_status
 
 

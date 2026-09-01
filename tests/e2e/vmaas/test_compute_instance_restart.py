@@ -6,12 +6,12 @@ import pytest
 
 from tests.e2e.catalog.conftest import unique_name
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import wait_for_cr, wait_for_deletion, wait_for_restart, wait_for_running
-from tests.core.k8s_client import K8sClient
-from tests.core.metering import MeteringCollector
-from tests.core.osac_cli import OsacCLI
-from tests.core.runner import poll_until
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import wait_for_cr, wait_for_deletion, wait_for_restart, wait_for_running
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.metering import MeteringCollector
+from tests.e2e.core.osac_cli import OsacCLI
+from tests.e2e.core.runner import poll_until
 
 
 def _wait_for_new_vmi(k8s_virt: K8sClient, *, vmi_namespace: str, ci_name: str, original_ts: str) -> str:

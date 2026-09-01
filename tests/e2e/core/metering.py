@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from tests.core.runner import poll_until
+from tests.e2e.core.runner import poll_until
 
 logger = logging.getLogger(__name__)
 

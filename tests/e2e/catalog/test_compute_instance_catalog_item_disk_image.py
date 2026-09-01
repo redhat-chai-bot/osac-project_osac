@@ -5,8 +5,8 @@ import subprocess
 import pytest
 
 from tests.e2e.catalog.conftest import unique_name
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import assert_grpc_rejected, wait_for_grpc_removal
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import assert_grpc_rejected, wait_for_grpc_removal
 
 SOURCE_REF = "quay.io/containerdisks/fedora:41"
 

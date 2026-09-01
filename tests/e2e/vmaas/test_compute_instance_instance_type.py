@@ -8,11 +8,11 @@ from uuid import uuid4
 import pytest
 
 from tests.e2e.catalog.conftest import unique_name
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import wait_for_cr, wait_for_deletion
-from tests.core.k8s_client import K8sClient
-from tests.core.osac_cli import OsacCLI
-from tests.core.runner import run_unchecked
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import wait_for_cr, wait_for_deletion
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.osac_cli import OsacCLI
+from tests.e2e.core.runner import run_unchecked
 
 IT_CORES: int = 2
 IT_MEMORY_GIB: int = 4

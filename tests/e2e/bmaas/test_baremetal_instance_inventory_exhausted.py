@@ -5,8 +5,8 @@ import subprocess
 
 import pytest
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import (
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import (
     assert_bmi_does_not_become_running,
     assert_bmi_lifecycle_on_running,
     wait_for_bmi_cr,
@@ -15,9 +15,9 @@ from tests.core.helpers import (
     wait_for_bmi_running,
     wait_for_bmi_running_after_recovery,
 )
-from tests.core.k8s_client import K8sClient
-from tests.core.osac_cli import OsacCLI
-from tests.core.runner import poll_until
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.osac_cli import OsacCLI
+from tests.e2e.core.runner import poll_until
 
 _AVAILABLE_BMH_STATES = {"available", "ready"}
 _NOT_FOUND_RE = re.compile(r"Code:\s*NotFound|baremetalinstance\b.*\bnot found", re.IGNORECASE)

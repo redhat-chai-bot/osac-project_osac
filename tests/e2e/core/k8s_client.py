@@ -4,7 +4,7 @@ import json
 import subprocess
 from typing import Any
 
-from tests.core.runner import run, run_unchecked
+from tests.e2e.core.runner import run, run_unchecked
 
 
 class K8sClient:

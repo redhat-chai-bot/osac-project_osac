@@ -17,16 +17,16 @@ import pytest
 import websocket
 
 from tests.e2e.catalog.conftest import unique_name
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import (
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import (
     assert_grpc_rejected,
     wait_for_cr,
     wait_for_deletion,
     wait_for_provision,
     wait_for_running,
 )
-from tests.core.k8s_client import K8sClient
-from tests.core.osac_cli import OsacCLI
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.osac_cli import OsacCLI
 
 logger = logging.getLogger(__name__)
 

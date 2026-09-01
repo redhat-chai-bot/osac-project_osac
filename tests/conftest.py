@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from tests.core.grpc_client import PRIVATE_API, GRPCClient
-from tests.core.k8s_client import K8sClient
-from tests.core.keycloak import get_jwt
-from tests.core.keycloak_admin import (
+from tests.e2e.core.grpc_client import PRIVATE_API, GRPCClient
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.keycloak import get_jwt
+from tests.e2e.core.keycloak_admin import (
     add_user_to_organization,
     add_user_to_organization_group,
     ensure_organization_group,
@@ -20,9 +20,9 @@ from tests.core.keycloak_admin import (
     get_user_id,
     wait_for_organization,
 )
-from tests.core.metering import MeteringCollector
-from tests.core.osac_cli import OsacCLI
-from tests.core.runner import env, run
+from tests.e2e.core.metering import MeteringCollector
+from tests.e2e.core.osac_cli import OsacCLI
+from tests.e2e.core.runner import env, run
 
 
 def pytest_configure(config: pytest.Config) -> None:

@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from typing import Any
 
-from tests.core.runner import run, run_unchecked
+from tests.e2e.core.runner import run, run_unchecked
 
 
 class OsacCLI:

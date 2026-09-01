@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.runner import env
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.runner import env
 
 
 @pytest.fixture(scope="session")

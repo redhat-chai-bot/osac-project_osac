@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from tests.core.runner import env, run_unchecked
+from tests.e2e.core.runner import env, run_unchecked
 
 
 def _storage_controller_configured(namespace: str) -> bool:

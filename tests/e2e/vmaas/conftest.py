@@ -8,8 +8,8 @@ from collections.abc import Iterator
 
 import pytest
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import (
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import (
     wait_for_subnet_cr,
     wait_for_subnet_deletion,
     wait_for_subnet_ready,
@@ -18,9 +18,9 @@ from tests.core.helpers import (
     wait_for_virtual_network_deletion,
     wait_for_virtual_network_ready,
 )
-from tests.core.k8s_client import K8sClient
-from tests.core.osac_cli import OsacCLI
-from tests.core.runner import env
+from tests.e2e.core.k8s_client import K8sClient
+from tests.e2e.core.osac_cli import OsacCLI
+from tests.e2e.core.runner import env
 
 DEFAULT_IT_CORES: int = 2
 DEFAULT_IT_MEMORY_GIB: int = 4

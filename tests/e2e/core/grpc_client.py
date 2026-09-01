@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from tests.core.runner import run, run_unchecked
+from tests.e2e.core.runner import run, run_unchecked
 
 PUBLIC_API: str = "osac.public.v1"
 PRIVATE_API: str = "osac.private.v1"

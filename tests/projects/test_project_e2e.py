@@ -4,9 +4,9 @@ import subprocess
 
 import pytest
 
-from tests.core.grpc_client import GRPCClient
-from tests.core.helpers import assert_grpc_rejected
-from tests.core.keycloak_admin import wait_for_project_not_in_keycloak
+from tests.e2e.core.grpc_client import GRPCClient
+from tests.e2e.core.helpers import assert_grpc_rejected
+from tests.e2e.core.keycloak_admin import wait_for_project_not_in_keycloak
 
 
 def test_project_full_lifecycle(

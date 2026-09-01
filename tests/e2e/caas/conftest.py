@@ -5,8 +5,8 @@ from collections.abc import Iterator
 
 import pytest
 
-from tests.core.osac_cli import OsacCLI
-from tests.core.runner import env
+from tests.e2e.core.osac_cli import OsacCLI
+from tests.e2e.core.runner import env
 
 
 # TODO(OSAC-1060): Remove this override once the osac-operator storage controller

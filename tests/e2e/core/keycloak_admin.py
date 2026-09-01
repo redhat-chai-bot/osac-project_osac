@@ -5,7 +5,7 @@ import time
 from typing import Any
 from urllib.parse import urlencode
 
-from tests.core.runner import run
+from tests.e2e.core.runner import run
 
 
 def get_admin_token(*, keycloak_url: str, username: str, password: str) -> str:

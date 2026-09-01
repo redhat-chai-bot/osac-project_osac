@@ -5,15 +5,15 @@ import subprocess
 
 import pytest
 
-from tests.core.grpc_client import PUBLIC_API, GRPCClient
-from tests.core.helpers import (
+from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
+from tests.e2e.core.helpers import (
     assert_grpc_field_violation,
     wait_for_security_group_cr,
     wait_for_security_group_deletion,
     wait_for_subnet_cr,
     wait_for_subnet_deletion,
 )
-from tests.core.k8s_client import K8sClient
+from tests.e2e.core.k8s_client import K8sClient
 
 logger = logging.getLogger(__name__)
 

@@ -9,8 +9,8 @@ from uuid import uuid4
 
 import pytest
 
-from tests.core.grpc_client import PUBLIC_API, GRPCClient
-from tests.core.helpers import (
+from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
+from tests.e2e.core.helpers import (
     wait_for_security_group_cr,
     wait_for_security_group_deletion,
     wait_for_security_group_ready,
@@ -21,7 +21,7 @@ from tests.core.helpers import (
     wait_for_virtual_network_deletion,
     wait_for_virtual_network_ready,
 )
-from tests.core.k8s_client import K8sClient
+from tests.e2e.core.k8s_client import K8sClient
 
 logger = logging.getLogger(__name__)
 

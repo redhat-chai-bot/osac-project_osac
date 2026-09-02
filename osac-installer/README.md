@@ -409,7 +409,7 @@ For issues and questions:
 - Check the troubleshooting section above
 - Review component logs for error messages
 - Verify prerequisites are properly installed
-- Open issues in the [osac-project/osac](https://github.com/osac-project/osac) repository
+- Report bugs and feature requests in the [OSAC Jira project](https://redhat.atlassian.net/projects/OSAC)
 
 ## License
 

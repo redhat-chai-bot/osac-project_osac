@@ -107,7 +107,7 @@ TMP_DIR=$(mktemp -d)
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
 cat >"${TMP_DIR}/realm-raw.json" <<'EOF'
-{"username": "__OSAC_REALM_ADMIN_USERNAME__", "credentials": [{"type": "password", "value": "__OSAC_REALM_ADMIN_PASSWORD__", "temporary": false}]}
+{"username": "__OSAC_REALM_ADMIN_USERNAME__", "credentials": [{"type": "password", "value": "__OSAC_REALM_ADMIN_PASSWORD__", "temporary": false}], "clients": [{"clientId": "osac-csi-driver", "secret": "__OSAC_CSI_DRIVER_CLIENT_SECRET__"}]}
 EOF
 
 # Stub `oc` so the hook script's client-secret bootstrap path is exercised
@@ -118,11 +118,12 @@ cat >"${TMP_DIR}/bin/oc" <<'EOF'
 #!/usr/bin/env bash
 args="$*"
 case "${args}" in
-  *"-o jsonpath="*osac-controller*) printf '%s' "$(printf 'controller-secret' | base64)" ;;
-  *"-o jsonpath="*osac-admin*)      printf '%s' "$(printf 'admin-secret' | base64)" ;;
-  *"create secret"*)                exit 0 ;;
-  *"get secret"*)                   exit 1 ;;  # existence check: force the "generate" branch
-  *)                                exit 0 ;;
+  *"-o jsonpath="*osac-controller*)  printf '%s' "$(printf 'controller-secret' | base64)" ;;
+  *"-o jsonpath="*osac-csi-driver*)  printf '%s' "$(printf 'csi-driver-secret' | base64)" ;;
+  *"-o jsonpath="*osac-admin*)       printf '%s' "$(printf 'admin-secret' | base64)" ;;
+  *"create secret"*)                 exit 0 ;;
+  *"get secret"*)                    exit 1 ;;  # existence check: force the "generate" branch
+  *)                                 exit 0 ;;
 esac
 EOF
 chmod +x "${TMP_DIR}/bin/oc"
@@ -155,6 +156,8 @@ sys.exit(0 if decoded == os.environ['EXPECTED_REALM_PASSWORD'] else 1)
         1) fail "Resolved realm.json's decoded password does not match the original" ;;
     esac
     assert_not_contains "${RESOLVED}" '__OSAC_REALM_ADMIN_PASSWORD__' "Placeholder must be fully substituted"
+    assert_not_contains "${RESOLVED}" '__OSAC_CSI_DRIVER_CLIENT_SECRET__' "CSI driver placeholder must be fully substituted"
+    assert_not_contains "${RESOLVED}" '__OSAC_' "No __OSAC_ placeholders must remain after substitution"
 else
     fail "resolve-realm-secrets.sh did not produce ${TMP_DIR}/realm-resolved.json"
 fi
@@ -266,6 +269,7 @@ echo "=== Test 6: static reference manifest's realm.json and resolve-realm-secre
 STATIC_REALM_JSON=$(cat "${SCRIPT_DIR}/../prerequisites/keycloak/service/files/realm.json")
 assert_contains "${STATIC_REALM_JSON}" '__OSAC_REALM_ADMIN_USERNAME__' "Static realm.json admin username placeholder"
 assert_contains "${STATIC_REALM_JSON}" '__OSAC_REALM_ADMIN_PASSWORD__' "Static realm.json admin password placeholder"
+assert_contains "${STATIC_REALM_JSON}" '__OSAC_CSI_DRIVER_CLIENT_SECRET__' "Static realm.json osac-csi-driver client secret placeholder"
 assert_not_contains "${STATIC_REALM_JSON}" 'ETe90wgj32P' "Static reference manifest's realm.json must not retain the static argon2 password hash"
 
 STATIC_RESOLVE_SCRIPT=$(python3 -c "
@@ -317,6 +321,9 @@ sys.exit(0 if decoded == os.environ['EXPECTED_REALM_PASSWORD'] else 1)
             2) fail "Static reference manifest's resolved realm.json is not valid JSON after substituting a password with sed/JSON metacharacters" ;;
             1) fail "Static reference manifest's resolved realm.json decoded password does not match the original" ;;
         esac
+        STATIC_RESOLVED=$(cat "${TMP_DIR}/static-realm-resolved.json")
+        assert_not_contains "${STATIC_RESOLVED}" '__OSAC_CSI_DRIVER_CLIENT_SECRET__' "Static resolved realm.json must not retain the osac-csi-driver placeholder"
+        assert_not_contains "${STATIC_RESOLVED}" '__OSAC_' "Static resolved realm.json must have no remaining __OSAC_ placeholders"
     else
         fail "Static reference manifest's resolve-realm-secrets script did not produce a resolved realm.json"
     fi

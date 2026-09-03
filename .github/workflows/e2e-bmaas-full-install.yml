@@ -197,7 +197,7 @@ jobs:
       id-token: write
     uses: osac-project/osac-test-infra/.github/workflows/e2e-bmaas-full-install.yml@main
     with:
-      # test-source=osac prefixes tests/e2e/. PR/merge_group: sanity (-n 4).
+      # PR/merge_group: sanity (-n 4).
       # Schedule: serial (-n 0, inventory exhaust). workflow_dispatch: honor
       # input, else sanity (bmaas/regression for networking, bmaas for all).
       test-suite: >-
@@ -232,8 +232,6 @@ jobs:
       # Checkout osac-test-infra for tests/Containerfile (not the caller repo)
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: ${{ inputs.test-infra-ref || 'main' }}
-      # OSAC-3593: Use tests from osac mono-repo instead of osac-test-infra
-      test-source: "osac"
       test-repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
       test-ref: ${{ github.event.pull_request.head.sha || github.sha }}
       # Gated on ref, not event type: the real constraint is WIF trust

@@ -529,7 +529,6 @@ jobs:
       installer-ref: ${{ needs.prepare.outputs.temp-branch }}
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: main
-      test-source: osac
       test-ref: ${{ needs.prepare.outputs.temp-branch }}
       # This pipeline only runs via schedule/workflow_dispatch against
       # main, same safe WIF context as the regular e2e-*-full-install.yml
@@ -557,7 +556,6 @@ jobs:
       installer-ref: ${{ needs.prepare.outputs.temp-branch }}
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: main
-      test-source: osac
       test-ref: ${{ needs.prepare.outputs.temp-branch }}
       # See e2e-vmaas-test's identical input above for why this is set.
       enable-ai-diagnostic: ${{ github.ref == 'refs/heads/main' }}
@@ -577,7 +575,6 @@ jobs:
       installer-ref: ${{ needs.prepare.outputs.temp-branch }}
       test-infra-repository: osac-project/osac-test-infra
       test-infra-ref: main
-      test-source: osac
       test-ref: ${{ needs.prepare.outputs.temp-branch }}
       # See e2e-vmaas-test's identical input above for why this is set.
       enable-ai-diagnostic: ${{ github.ref == 'refs/heads/main' }}

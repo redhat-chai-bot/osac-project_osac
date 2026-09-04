@@ -3,8 +3,6 @@ from __future__ import annotations
 import re
 import subprocess
 
-import pytest
-
 from tests.e2e.core.grpc_client import GRPCClient
 from tests.e2e.core.helpers import (
     assert_bmi_does_not_become_running,

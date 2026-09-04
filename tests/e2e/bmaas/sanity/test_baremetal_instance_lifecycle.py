@@ -4,8 +4,6 @@ import logging
 import re
 from typing import Any
 
-import pytest
-
 from tests.e2e.core.grpc_client import GRPCClient
 from tests.e2e.core.helpers import (
     wait_for_bmh_available,

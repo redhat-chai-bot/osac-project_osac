@@ -283,7 +283,7 @@ def ensure_k8s_only_network_class(private_grpc: GRPCClient, k8s_hub_client: K8sC
 @pytest.fixture(scope="session")
 def cli(
     namespace: str, fulfillment_address: str, keycloak_url: str, jwt_username: str, jwt_password: str
-) -> Iterator[OsacCLI]:  # noqa: E501
+) -> Iterator[OsacCLI]:
     instance = OsacCLI(
         binary=env("OSAC_CLI_PATH", "osac"),
         address=f"https://{fulfillment_address.rsplit(':', 1)[0]}",

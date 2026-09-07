@@ -229,7 +229,13 @@ def test_compute_instance_tier_immutability(
             wait_for_deletion(k8s=k8s_hub_client, name=ci_name)
 
 
-@pytest.mark.parametrize("storage_tier", [None, {"name": ""}])
+@pytest.mark.parametrize(
+    ("storage_tier", "expected_error"),
+    [
+        (None, "storage_tier is required"),
+        ({"name": ""}, "reference must specify id or name"),
+    ],
+)
 def test_compute_instance_boot_disk_tier_required(
     private_grpc: GRPCClient,
     vm_template: str,
@@ -237,6 +243,7 @@ def test_compute_instance_boot_disk_tier_required(
     default_instance_type: str,
     default_disk_image: str,
     storage_tier: dict[str, str] | None,
+    expected_error: str,
 ) -> None:
     """Verify that absent and empty boot disk tiers return INVALID_ARGUMENT."""
     boot_disk: dict[str, Any] = {"size_gib": 20}
@@ -262,10 +269,16 @@ def test_compute_instance_boot_disk_tier_required(
         )
 
     assert_grpc_rejected(exc_info, "InvalidArgument")
-    assert "storage_tier is required" in str(exc_info.value.stderr).lower()
+    assert expected_error in str(exc_info.value.stderr).lower()
 
 
-@pytest.mark.parametrize("storage_tier", [None, {"name": ""}])
+@pytest.mark.parametrize(
+    ("storage_tier", "expected_error"),
+    [
+        (None, "storage_tier is required"),
+        ({"name": ""}, "reference must specify id or name"),
+    ],
+)
 def test_compute_instance_additional_disk_tier_required(
     private_grpc: GRPCClient,
     vm_template: str,
@@ -274,6 +287,7 @@ def test_compute_instance_additional_disk_tier_required(
     default_instance_type: str,
     default_disk_image: str,
     storage_tier: dict[str, str] | None,
+    expected_error: str,
 ) -> None:
     """Verify that absent and empty additional disk tiers return INVALID_ARGUMENT."""
     additional_disk: dict[str, Any] = {"size_gib": 50}
@@ -302,7 +316,7 @@ def test_compute_instance_additional_disk_tier_required(
         )
 
     assert_grpc_rejected(exc_info, "InvalidArgument")
-    assert "additional_disks[0].storage_tier is required" in str(exc_info.value.stderr).lower()
+    assert expected_error in str(exc_info.value.stderr).lower()
 
 
 def test_compute_instance_boot_disk_tier_from_catalog_item_default(

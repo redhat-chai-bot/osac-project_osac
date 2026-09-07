@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 _ENV_SKIP_PATTERNS = [re.compile(r"no host type"), re.compile(r"no instance type")]
 _FABRIC_MANAGER_SKIP_PATTERN = re.compile(r"require a fabric manager")
+_SERVICE_DISABLED_SKIP_PATTERN = re.compile(r"service is not enabled")
 
 # A BareMetalInstance requires at least one authentication method (ssh_public_key or
 # user_data) at create time, otherwise the resulting host would be inaccessible.
@@ -50,7 +51,13 @@ def cluster_template(private_grpc: GRPCClient) -> str:
     configured = env("OSAC_CLUSTER_TEMPLATE", "")
     if configured:
         return configured
-    response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.ClusterTemplates/List")
+    try:
+        response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.ClusterTemplates/List")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        if _SERVICE_DISABLED_SKIP_PATTERN.search(output):
+            pytest.skip(f"CaaS service is not enabled in this environment: {output.strip()}")
+        raise
     items = response.get("items", [])
     assert items, "No ClusterTemplates found; set OSAC_CLUSTER_TEMPLATE or deploy a template"
     return items[0]["metadata"]["name"]
@@ -96,7 +103,13 @@ def bmi_template(private_grpc: GRPCClient) -> str:
     configured = env("OSAC_BMI_TEMPLATE", "")
     if configured:
         return configured
-    response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.BareMetalInstanceTemplates/List")
+    try:
+        response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.BareMetalInstanceTemplates/List")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        if _SERVICE_DISABLED_SKIP_PATTERN.search(output):
+            pytest.skip(f"BMaaS service is not enabled in this environment: {output.strip()}")
+        raise
     items = response.get("items", [])
     assert items, "No BareMetalInstanceTemplates found; set OSAC_BMI_TEMPLATE or deploy a template"
     return items[0]["metadata"]["name"]

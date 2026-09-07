@@ -178,6 +178,34 @@ var _ = Describe("applyFieldDefinitions", func() {
 		Expect(spec.GetDiskImage().GetName()).To(Equal("my-disk-image"))
 	})
 
+	It("applies boot_disk.storage_tier field definition default to compute instance spec", func() {
+		spec := &privatev1.ComputeInstanceSpec{}
+		defaultVal, err := structpb.NewValue("standard")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "boot_disk.storage_tier",
+			Editable: true,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(spec.GetBootDisk().GetStorageTier().GetName()).To(Equal("standard"))
+	})
+
+	It("applies non-editable default for string field boot_disk.storage_tier on compute instance spec", func() {
+		spec := &privatev1.ComputeInstanceSpec{}
+		defaultVal, err := structpb.NewValue("standard")
+		Expect(err).ToNot(HaveOccurred())
+		fieldDefs := []*privatev1.FieldDefinition{{
+			Path:     "boot_disk.storage_tier",
+			Editable: false,
+			Default:  defaultVal,
+		}}
+		err = applyFieldDefinitions(spec, fieldDefs)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(spec.GetBootDisk().GetStorageTier().GetName()).To(Equal("standard"))
+	})
+
 	It("rejects user value for non-editable template_parameter", func() {
 		vpcID, err := anypb.New(wrapperspb.String("vpc-123"))
 		Expect(err).ToNot(HaveOccurred())

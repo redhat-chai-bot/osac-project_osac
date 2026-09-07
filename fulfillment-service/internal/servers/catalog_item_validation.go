@@ -208,12 +208,12 @@ func applyDefault(specMap map[string]any, path string, defaultVal *structpb.Valu
 	if strings.HasPrefix(path, "template_parameters.") {
 		parsed = wrapValueAsAny(parsed)
 	}
-	// The disk_image default is normally already a DiskImageReference object
+	// The disk_image and storage_tier defaults are normally already reference objects
 	// ({"id": ..., "name": ...}), normalized on catalog-item create/update (see
-	// validateFieldDefinitionsDiskImage), so its id resolves the ComputeInstance reference
+	// validateFieldDefinitionsDiskImage), so their id resolves the ComputeInstance reference
 	// unambiguously. This wrap is a defensive fallback: a bare-string default is converted to the
-	// {"name": ...} object the proto DiskImageReference field expects.
-	if path == "disk_image" {
+	// {"name": ...} object the proto reference field expects.
+	if path == "disk_image" || strings.HasSuffix(path, "storage_tier") {
 		if s, ok := parsed.(string); ok {
 			parsed = map[string]any{"name": s}
 		}

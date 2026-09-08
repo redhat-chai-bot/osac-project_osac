@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 _ENV_SKIP_PATTERNS = [re.compile(r"no host type"), re.compile(r"no instance type")]
 _FABRIC_MANAGER_SKIP_PATTERN = re.compile(r"require a fabric manager")
+_SERVICE_DISABLED_SKIP_PATTERN = re.compile(r"service is not enabled")
 
 # A BareMetalInstance requires at least one authentication method (ssh_public_key or
 # user_data) at create time, otherwise the resulting host would be inaccessible.
@@ -32,6 +33,8 @@ def _create_cluster_or_skip(cli: OsacCLI, *, catalog_item: str, name: str, versi
         for pat in _ENV_SKIP_PATTERNS:
             if pat.search(output):
                 pytest.skip(f"Cluster creation not viable in this environment: {output.strip()}")
+        if _SERVICE_DISABLED_SKIP_PATTERN.search(output):
+            pytest.skip(f"Cluster creation skipped (service not enabled): {output.strip()}")
         raise
 
 
@@ -42,6 +45,8 @@ def _create_bmi_or_skip(grpc: GRPCClient, *, data: dict[str, Any]) -> dict[str, 
         output = (exc.stdout or "") + (exc.stderr or "")
         if _FABRIC_MANAGER_SKIP_PATTERN.search(output):
             pytest.skip("BMI creation requires a fabric manager, which is not available in this environment")
+        if _SERVICE_DISABLED_SKIP_PATTERN.search(output):
+            pytest.skip(f"BMI creation skipped (service not enabled): {output.strip()}")
         raise
 
 
@@ -50,7 +55,13 @@ def cluster_template(private_grpc: GRPCClient) -> str:
     configured = env("OSAC_CLUSTER_TEMPLATE", "")
     if configured:
         return configured
-    response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.ClusterTemplates/List")
+    try:
+        response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.ClusterTemplates/List")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        if _SERVICE_DISABLED_SKIP_PATTERN.search(output):
+            pytest.skip(f"CaaS service not enabled: {output.strip()}")
+        raise
     items = response.get("items", [])
     assert items, "No ClusterTemplates found; set OSAC_CLUSTER_TEMPLATE or deploy a template"
     return items[0]["metadata"]["name"]
@@ -62,25 +73,37 @@ def cluster_version(grpc: GRPCClient, private_grpc: GRPCClient) -> Generator[str
     if configured:
         yield configured
         return
-    response: dict[str, Any] = grpc.call(service=f"{PUBLIC_API}.ClusterVersions/List")
+    try:
+        response: dict[str, Any] = grpc.call(service=f"{PUBLIC_API}.ClusterVersions/List")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        if _SERVICE_DISABLED_SKIP_PATTERN.search(output):
+            pytest.skip(f"CaaS service not enabled: {output.strip()}")
+        raise
     items = response.get("items", [])
     if items:
         yield items[0]["metadata"]["name"]
         return
     tag = uuid4().hex[:8]
     name = f"ref-cv-{tag}"
-    cv_response: dict[str, Any] = private_grpc.call(
-        service=f"{PRIVATE_API}.ClusterVersions/Create",
-        data={
-            "object": {
-                "metadata": {"name": name},
-                "spec": {
-                    "version": f"4.17.{int(tag, 16) % 10000}",
-                    "image": "quay.io/openshift-release-dev/ocp-release:4.17.0-multi",
-                },
-            }
-        },
-    )
+    try:
+        cv_response: dict[str, Any] = private_grpc.call(
+            service=f"{PRIVATE_API}.ClusterVersions/Create",
+            data={
+                "object": {
+                    "metadata": {"name": name},
+                    "spec": {
+                        "version": f"4.17.{int(tag, 16) % 10000}",
+                        "image": "quay.io/openshift-release-dev/ocp-release:4.17.0-multi",
+                    },
+                }
+            },
+        )
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        if _SERVICE_DISABLED_SKIP_PATTERN.search(output):
+            pytest.skip(f"CaaS service not enabled: {output.strip()}")
+        raise
     cv_id = cv_response["object"]["id"]
     try:
         yield name
@@ -96,7 +119,13 @@ def bmi_template(private_grpc: GRPCClient) -> str:
     configured = env("OSAC_BMI_TEMPLATE", "")
     if configured:
         return configured
-    response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.BareMetalInstanceTemplates/List")
+    try:
+        response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.BareMetalInstanceTemplates/List")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        if _SERVICE_DISABLED_SKIP_PATTERN.search(output):
+            pytest.skip(f"BMaaS service not enabled: {output.strip()}")
+        raise
     items = response.get("items", [])
     assert items, "No BareMetalInstanceTemplates found; set OSAC_BMI_TEMPLATE or deploy a template"
     return items[0]["metadata"]["name"]

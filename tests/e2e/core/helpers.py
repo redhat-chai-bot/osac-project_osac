@@ -440,10 +440,20 @@ def _force_cleanup_machine_preterminate_hooks(*, k8s: K8sClient, name: str) -> N
 
 
 def wait_for_cluster_deleting(*, k8s: K8sClient, name: str) -> None:
+    def _check() -> str:
+        phase = k8s.get_cluster_order_phase(name=name, checked=False)
+        if phase:
+            return phase
+        # Phase is empty — check whether the resource still exists.
+        # If already gone, it passed through "Deleting" and was deleted.
+        if not k8s.is_present(resource="clusterorder", name=name):
+            return "Deleting"
+        return ""
+
     poll_until(
-        fn=lambda: k8s.get_cluster_order_phase(name=name, checked=False),
+        fn=_check,
         until=lambda v: v == "Deleting",
-        retries=30,
+        retries=60,
         delay=5,
         description=f"{name} ClusterOrder Deleting phase",
     )

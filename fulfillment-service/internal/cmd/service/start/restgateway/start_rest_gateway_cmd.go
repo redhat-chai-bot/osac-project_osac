@@ -296,7 +296,7 @@ type handlerRegistrar func(context.Context, *runtime.ServeMux, *grpc.ClientConn)
 
 // registerHandlers registers all public and private API service handlers on the gateway mux.
 func (c *runnerContext) registerHandlers(ctx context.Context, mux *runtime.ServeMux) error {
-	for _, register := range buildHandlerList(c.args.services) {
+	for _, register := range buildHandlerList() {
 		if err := register(ctx, mux, c.grpcClient); err != nil {
 			return err
 		}
@@ -304,13 +304,12 @@ func (c *runnerContext) registerHandlers(ctx context.Context, mux *runtime.Serve
 	return nil
 }
 
-// buildHandlerList returns the set of grpc-gateway handler registrars to register,
-// filtered by which services are enabled.
-func buildHandlerList(svcFlags *services.Flags) []handlerRegistrar {
-	var handlers []handlerRegistrar
-
-	// Shared public API (always registered):
-	handlers = append(handlers,
+// buildHandlerList returns the complete set of grpc-gateway handler registrars.
+// All handlers are always registered; disabled services are rejected by the gRPC
+// server's UnknownServiceHandler, which grpc-gateway translates to HTTP 503.
+func buildHandlerList() []handlerRegistrar {
+	return []handlerRegistrar{
+		// Shared public API:
 		publicv1.RegisterCapabilitiesHandler,
 		publicv1.RegisterHostTypesHandler,
 		publicv1.RegisterVirtualNetworksHandler,
@@ -324,10 +323,7 @@ func buildHandlerList(svcFlags *services.Flags) []handlerRegistrar {
 		publicv1.RegisterRoleBindingsHandler,
 		publicv1.RegisterJsonWebKeySetHandler,
 		publicv1.RegisterStorageTiersHandler,
-	)
-
-	// Shared private API (always registered):
-	handlers = append(handlers,
+		// Shared private API:
 		privatev1.RegisterCapabilitiesHandler,
 		privatev1.RegisterEventsHandler,
 		privatev1.RegisterHostTypesHandler,
@@ -345,55 +341,38 @@ func buildHandlerList(svcFlags *services.Flags) []handlerRegistrar {
 		privatev1.RegisterExternalIPAttachmentsHandler,
 		privatev1.RegisterRolesHandler,
 		privatev1.RegisterRoleBindingsHandler,
-	)
-
-	// CaaS handlers:
-	if svcFlags.CaaS {
-		handlers = append(handlers,
-			publicv1.RegisterClusterTemplatesHandler,
-			publicv1.RegisterClusterCatalogItemsHandler,
-			publicv1.RegisterClustersHandler,
-			publicv1.RegisterClusterVersionsHandler,
-			privatev1.RegisterClusterTemplatesHandler,
-			privatev1.RegisterClusterCatalogItemsHandler,
-			privatev1.RegisterClustersHandler,
-			privatev1.RegisterClusterVersionsHandler,
-		)
+		// CaaS:
+		publicv1.RegisterClusterTemplatesHandler,
+		publicv1.RegisterClusterCatalogItemsHandler,
+		publicv1.RegisterClustersHandler,
+		publicv1.RegisterClusterVersionsHandler,
+		privatev1.RegisterClusterTemplatesHandler,
+		privatev1.RegisterClusterCatalogItemsHandler,
+		privatev1.RegisterClustersHandler,
+		privatev1.RegisterClusterVersionsHandler,
+		// VMaaS:
+		publicv1.RegisterComputeInstanceTemplatesHandler,
+		publicv1.RegisterComputeInstanceCatalogItemsHandler,
+		publicv1.RegisterComputeInstancesHandler,
+		publicv1.RegisterDiskImagesHandler,
+		publicv1.RegisterConsoleSessionsHandler,
+		publicv1.RegisterInstanceTypesHandler,
+		privatev1.RegisterComputeInstanceTemplatesHandler,
+		privatev1.RegisterComputeInstanceCatalogItemsHandler,
+		privatev1.RegisterComputeInstancesHandler,
+		privatev1.RegisterDiskImagesHandler,
+		privatev1.RegisterInstanceTypesHandler,
+		privatev1.RegisterVolumesHandler,
+		// BMaaS:
+		publicv1.RegisterBareMetalInstanceTemplatesHandler,
+		publicv1.RegisterBareMetalInstanceCatalogItemsHandler,
+		publicv1.RegisterBareMetalInstancesHandler,
+		publicv1.RegisterBareMetalInstanceTypesHandler,
+		privatev1.RegisterBareMetalInstanceTemplatesHandler,
+		privatev1.RegisterBareMetalInstanceCatalogItemsHandler,
+		privatev1.RegisterBareMetalInstancesHandler,
+		privatev1.RegisterBareMetalInstanceTypesHandler,
 	}
-
-	// VMaaS handlers:
-	if svcFlags.VMaaS {
-		handlers = append(handlers,
-			publicv1.RegisterComputeInstanceTemplatesHandler,
-			publicv1.RegisterComputeInstanceCatalogItemsHandler,
-			publicv1.RegisterComputeInstancesHandler,
-			publicv1.RegisterDiskImagesHandler,
-			publicv1.RegisterConsoleSessionsHandler,
-			publicv1.RegisterInstanceTypesHandler,
-			privatev1.RegisterComputeInstanceTemplatesHandler,
-			privatev1.RegisterComputeInstanceCatalogItemsHandler,
-			privatev1.RegisterComputeInstancesHandler,
-			privatev1.RegisterDiskImagesHandler,
-			privatev1.RegisterInstanceTypesHandler,
-			privatev1.RegisterVolumesHandler,
-		)
-	}
-
-	// BMaaS handlers:
-	if svcFlags.BMaaS {
-		handlers = append(handlers,
-			publicv1.RegisterBareMetalInstanceTemplatesHandler,
-			publicv1.RegisterBareMetalInstanceCatalogItemsHandler,
-			publicv1.RegisterBareMetalInstancesHandler,
-			publicv1.RegisterBareMetalInstanceTypesHandler,
-			privatev1.RegisterBareMetalInstanceTemplatesHandler,
-			privatev1.RegisterBareMetalInstanceCatalogItemsHandler,
-			privatev1.RegisterBareMetalInstancesHandler,
-			privatev1.RegisterBareMetalInstanceTypesHandler,
-		)
-	}
-
-	return handlers
 }
 
 // userAgent is the user agent string for the REST gateway.

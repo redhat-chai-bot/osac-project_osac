@@ -20,8 +20,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/osac-project/osac/fulfillment-service/internal/services"
 )
 
 func handlerName(h handlerRegistrar) string {
@@ -55,20 +53,6 @@ func containsAll(names []string, expected []string) []string {
 		}
 	}
 	return missing
-}
-
-func containsNone(names []string, excluded []string) []string {
-	set := make(map[string]bool, len(names))
-	for _, n := range names {
-		set[n] = true
-	}
-	var found []string
-	for _, e := range excluded {
-		if set[e] {
-			found = append(found, e)
-		}
-	}
-	return found
 }
 
 var caasHandlers = []string{
@@ -134,38 +118,13 @@ var sharedHandlers = []string{
 }
 
 var _ = Describe("buildHandlerList", func() {
-	It("includes all service groups when all are enabled", func() {
-		handlers := buildHandlerList(&services.Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true})
+	It("always registers all CaaS, VMaaS, BMaaS, and shared handlers", func() {
+		handlers := buildHandlerList()
 		names := handlerNames(handlers)
 
 		Expect(containsAll(names, caasHandlers)).To(BeEmpty(), "missing CaaS handlers")
 		Expect(containsAll(names, vmaasHandlers)).To(BeEmpty(), "missing VMaaS handlers")
 		Expect(containsAll(names, bmaasHandlers)).To(BeEmpty(), "missing BMaaS handlers")
-		Expect(containsAll(names, sharedHandlers)).To(BeEmpty(), "missing shared handlers")
-	})
-
-	It("excludes BMaaS handlers when BMaaS is disabled", func() {
-		handlers := buildHandlerList(&services.Flags{CaaS: true, VMaaS: true, BMaaS: false, MaaS: false})
-		names := handlerNames(handlers)
-
-		Expect(containsNone(names, bmaasHandlers)).To(BeEmpty(), "BMaaS handlers should be absent")
-		Expect(containsAll(names, caasHandlers)).To(BeEmpty(), "missing CaaS handlers")
-		Expect(containsAll(names, vmaasHandlers)).To(BeEmpty(), "missing VMaaS handlers")
-	})
-
-	It("includes only VMaaS and shared handlers when only VMaaS is enabled", func() {
-		handlers := buildHandlerList(&services.Flags{CaaS: false, VMaaS: true, BMaaS: false, MaaS: false})
-		names := handlerNames(handlers)
-
-		Expect(containsNone(names, caasHandlers)).To(BeEmpty(), "CaaS handlers should be absent")
-		Expect(containsNone(names, bmaasHandlers)).To(BeEmpty(), "BMaaS handlers should be absent")
-		Expect(containsAll(names, vmaasHandlers)).To(BeEmpty(), "missing VMaaS handlers")
-	})
-
-	It("always includes shared handlers even when all services are disabled", func() {
-		handlers := buildHandlerList(&services.Flags{CaaS: false, VMaaS: false, BMaaS: false, MaaS: false})
-		names := handlerNames(handlers)
-
 		Expect(containsAll(names, sharedHandlers)).To(BeEmpty(), "missing shared handlers")
 	})
 })

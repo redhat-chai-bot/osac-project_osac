@@ -50,7 +50,13 @@ def cluster_template(private_grpc: GRPCClient) -> str:
     configured = env("OSAC_CLUSTER_TEMPLATE", "")
     if configured:
         return configured
-    response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.ClusterTemplates/List")
+    try:
+        response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.ClusterTemplates/List")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        if "Unavailable" in output:
+            pytest.skip("CaaS service is not available (disabled)")
+        raise
     items = response.get("items", [])
     assert items, "No ClusterTemplates found; set OSAC_CLUSTER_TEMPLATE or deploy a template"
     return items[0]["metadata"]["name"]
@@ -96,7 +102,13 @@ def bmi_template(private_grpc: GRPCClient) -> str:
     configured = env("OSAC_BMI_TEMPLATE", "")
     if configured:
         return configured
-    response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.BareMetalInstanceTemplates/List")
+    try:
+        response: dict[str, Any] = private_grpc.call(service=f"{PRIVATE_API}.BareMetalInstanceTemplates/List")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        if "Unavailable" in output:
+            pytest.skip("BMaaS service is not available (disabled)")
+        raise
     items = response.get("items", [])
     assert items, "No BareMetalInstanceTemplates found; set OSAC_BMI_TEMPLATE or deploy a template"
     return items[0]["metadata"]["name"]

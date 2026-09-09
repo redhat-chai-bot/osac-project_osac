@@ -8,4 +8,8 @@
     wait: true
     access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') | trim }}"
     secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') | trim }}"
+  register: _r53_delete
+  failed_when:
+    - _r53_delete is failed
+    - "'it was not found' not in (_r53_delete.msg | default(''))"
   no_log: true

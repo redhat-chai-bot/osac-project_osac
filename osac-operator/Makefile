@@ -25,6 +25,10 @@ endif
 # tools. (i.e. podman)
 CONTAINER_TOOL ?= podman
 
+# HELM_EXTRA_ARGS allows callers (e.g. the root Makefile's dev-env target) to
+# pass additional flags to helm upgrade --install in the deploy target.
+HELM_EXTRA_ARGS ?=
+
 # KIND defines the path to your kind binary.
 KIND = kind
 KIND_CLUSTER_NAME ?= osac-dev
@@ -86,8 +90,8 @@ helm-validate: helm-lint ## Lint and template-render Helm charts.
 	helm template osac-operator-crds charts/operator-crds/
 	helm template osac-operator charts/operator/
 
-# Run integration tests against a pre-existing Kind cluster deployed via
-# the root Makefile's `make dev-env` + `make integration-test-operator`.
+# Run integration tests against a pre-existing Kind cluster.
+# Quick setup:  make dev-env  (from the repository root)
 .PHONY: integration-tests
 integration-tests: manifests generate helm-crds ## Run integration tests against a Kind cluster.
 	ginkgo run --timeout 30m -v test/integration
@@ -215,7 +219,7 @@ uninstall: ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 
 .PHONY: deploy
 deploy: manifests helm-crds ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	helm upgrade --install osac-operator charts/operator/ --set image.repository=$(firstword $(subst :, ,${IMG})) --set image.tag=$(lastword $(subst :, ,${IMG}))
+	helm upgrade --install osac-operator charts/operator/ --set image.repository=$(firstword $(subst :, ,${IMG})) --set image.tag=$(lastword $(subst :, ,${IMG})) $(HELM_EXTRA_ARGS)
 
 .PHONY: undeploy
 undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.

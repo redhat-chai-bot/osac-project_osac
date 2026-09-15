@@ -19,6 +19,7 @@ package integration
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -29,7 +30,14 @@ import (
 	"github.com/osac-project/osac/osac-operator/test/utils"
 )
 
-const operatorNamespace = "osac"
+var operatorNamespace = getEnvOrDefault("OSAC_OPERATOR_NAMESPACE", "osac")
+
+func getEnvOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
 
 var _ = BeforeSuite(func() {
 	By("verifying controller-manager pod is running with zero restarts")

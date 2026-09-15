@@ -5,7 +5,7 @@ CONTAINER_CMD ?= $(shell command -v podman 2>/dev/null || echo docker)
 DISTROBOX_CONTEXT := tools/distrobox
 ARGS ?=
 
-.PHONY: image enter claude stop rm rebuild status help
+.PHONY: image enter claude stop rm rebuild status help dev-env integration-test-operator
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -39,3 +39,12 @@ status: ## Show distrobox and image status
 	@echo ""
 	@echo "=== Distrobox ==="
 	@distrobox list --no-color 2>/dev/null | head -1; distrobox list --no-color 2>/dev/null | awk -F'|' 'NR>1{gsub(/^ +| +$$/,"",$$2); if($$2=="$(DISTROBOX_NAME)") { print; found=1 }} END { if (!found) print "  (not created)" }'
+
+dev-env: ## Create a Kind cluster with the operator for local development
+	kind create cluster --name osac-dev 2>/dev/null || true
+	kubectl create namespace osac 2>/dev/null || true
+	$(MAKE) -C osac-operator kind-load
+	$(MAKE) -C osac-operator deploy HELM_EXTRA_ARGS="--namespace osac --create-namespace --set controllers.networking.enabled=false --set controllers.consoleProxy.enabled=false"
+
+integration-test-operator: ## Run osac-operator integration tests against the dev-env
+	$(MAKE) -C osac-operator integration-tests

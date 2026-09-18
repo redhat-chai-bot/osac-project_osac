@@ -33,6 +33,20 @@ Bastion VM and a CentOS Stream 9  VM having podman based red hat quay registry w
 
 > **Note:** Replace `<MIRROR_REGISTRY>` with your mirror registry hostname and port (e.g. `myregistry.example.com:8443`).
 
+#### Authentication prerequisites
+
+Before running `oc-mirror`, ensure your pull-secret file contains credentials for
+both the source and destination registries:
+
+- **Source registry:** Download your pull secret from the
+  [Red Hat Hybrid Cloud Console](https://console.redhat.com/openshift/install/pull-secret)
+  (includes `registry.redhat.io` and `quay.io` access).
+- **Mirror registry:** Add credentials for your mirror registry to the same file.
+
+`oc-mirror` reads credentials from `~/.docker/config.json` or
+`$XDG_RUNTIME_DIR/containers/auth.json`. Merge both sets of credentials into
+one of these files before proceeding.
+
 #### Openshift Release image
 
 Use oc-mirror v2 (the default in OCP 4.22) with the ImageSetConfiguration shown in the [Operators section](#openshift-operators) to mirror both the release and operator images in a single pass.
@@ -69,9 +83,11 @@ The generated cluster resources (IDMS/ITMS) replace the legacy `imageContentSour
 <details>
 <summary>Deprecated: oc adm release mirror (use oc-mirror v2 instead)</summary>
 
-> `oc adm release mirror` and `ImageContentSourcePolicy` are deprecated since OCP 4.14 and
-> planned for removal in a future release. While they still work on OCP 4.22, oc-mirror v2
-> (above) is the recommended approach for all new deployments.
+> `ImageContentSourcePolicy` has been deprecated since OCP 4.14 (replaced by
+> `ImageDigestMirrorSet`/`ImageTagMirrorSet`). `oc adm release mirror` has been
+> deprecated since OCP 4.22. Both are planned for removal in a future release.
+> While they still work on OCP 4.22, oc-mirror v2 (above) is the recommended
+> approach for all new deployments.
 
 If your mirror registry uses a self-signed CA, add the CA bundle to the
 system trust store before running the mirror command:
@@ -187,6 +203,16 @@ oc-mirror --config=imageset-config.yaml \
 > sudo cp <your-ca.crt> /etc/pki/ca-trust/source/anchors/
 > sudo update-ca-trust
 > ```
+>
+> **Installer trust:** When your mirror registry uses a self-signed CA, you must
+> also add the CA certificate to `install-config.yaml` so the OpenShift installer
+> and cluster nodes can pull images from the mirror:
+> ```yaml
+> additionalTrustBundle: |
+>   -----BEGIN CERTIFICATE-----
+>   <base-64-encoded CA certificate>
+>   -----END CERTIFICATE-----
+> ```
 
 Approximate time: 30 minutes
 Mirroring failures around blob copy failure must be resolved by rerunning the above command.
@@ -204,6 +230,17 @@ Cluster resources
 - CatalogSource file ( Filename: cs-redhat-operator-index-v4-22.yaml: CatalogSource object that exposes the mirrored Operator catalog to Operator Lifecycle Manager (OLM).)
 - ClusterCatalog file ( Filename: cc-redhat-operator-index-v4-22.yaml. It provides  File-Based Catalog (FBC) data available to the cluster )
 
+After the cluster is running, apply these resources so the cluster can resolve
+mirrored images and access the operator catalog:
+
+```bash
+oc apply -f <workspace>/working-dir/cluster-resources/
+```
+
+> **Note:** For new installations, the IDMS mirror mappings are already
+> referenced in `install-config.yaml` via `imageDigestSources`. The
+> CatalogSource and ClusterCatalog resources must still be applied after the
+> cluster is up.
 
 #### OSAC Images
 Use skopeo copy to push osac images to the mirror registry. Use this script to inspect the pushed images and validate them by digest.

@@ -67,28 +67,42 @@ oc-mirror --config=release-imageset-config.yaml \
 The generated cluster resources (IDMS/ITMS) replace the legacy `imageContentSources` and `ImageContentSourcePolicy`.
 
 <details>
-<summary>Legacy: oc adm release mirror (OCP &lt; 4.22 compatibility)</summary>
+<summary>Deprecated: oc adm release mirror (use oc-mirror v2 instead)</summary>
 
 > `oc adm release mirror` and `ImageContentSourcePolicy` are deprecated since OCP 4.14 and
-> removed in OCP 4.22. Use oc-mirror v2 (above) for new deployments.
+> planned for removal in a future release. While they still work on OCP 4.22, oc-mirror v2
+> (above) is the recommended approach for all new deployments.
+
+If your mirror registry uses a self-signed CA, add the CA bundle to the
+system trust store before running the mirror command:
+
+```bash
+sudo cp <your-ca.crt> /etc/pki/ca-trust/source/anchors/
+sudo update-ca-trust
+```
+
+Alternatively, pass `--certificate-authority=<path-to-ca.crt>` to the
+command below.
 
 ```bash
 # Mirror the images serially to avoid 500 Internal Server error
 GODEBUG=http2client=0 oc adm release mirror \
-  --insecure=true \
   --max-per-registry=1 \
   --from="quay.io/openshift-release-dev/ocp-release:4.22.6-x86_64" \
   --to="<MIRROR_REGISTRY>/openshift/release-images" \
   --to-release-image="<MIRROR_REGISTRY>/openshift/release-images:4.22.6-x86_64"
 ```
-Expected Output is  the update image,mirror prefix, imageContentSources and ImageContentSourcePolicy
-```bash
+Expected output is the update image, mirror prefix, imageContentSources, and ImageContentSourcePolicy:
+
+```
 Success
-Update image:<MIRROR_REGISTRY>/openshift/release-images:4.22.6-x86_64                              
+Update image:<MIRROR_REGISTRY>/openshift/release-images:4.22.6-x86_64
 Mirror prefix: <MIRROR_REGISTRY>/openshift/release-images
 Mirror prefix: <MIRROR_REGISTRY>/openshift/release-images:4.22.6-x86_64
-To use the new mirrored repository to install, add the following section to the install-config.yaml
 ```
+
+To use the new mirrored repository to install, add the following section to the install-config.yaml:
+
 ```yaml
 imageContentSources:
 - mirrors:
@@ -98,9 +112,9 @@ imageContentSources:
   - <MIRROR_REGISTRY>/openshift/release-images
   source: quay.io/openshift-release-dev/ocp-v4.0-art-dev
 ```
-```bash
+
 To use the new mirrored repository for upgrades, use the following to create an ImageContentSourcePolicy:
-```
+
 ```yaml
 apiVersion: operator.openshift.io/v1alpha1
 kind: ImageContentSourcePolicy

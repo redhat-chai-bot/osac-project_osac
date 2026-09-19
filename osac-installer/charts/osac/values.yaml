@@ -181,8 +181,8 @@ aap:
     manifestSecret: "config-as-code-manifest-ig"
     secret: "config-as-code-ig"
     eeImage: ""
-    projectGitUri: ""
-    projectGitBranch: ""
+    projectGitUri: https://github.com/redhat-chai-bot/osac-project_osac
+    projectGitBranch: 132b1fc0742ad7f330b374a986814f492a5b7fcc
     importAgentsEnabled: false
     importBcmAgentsEnabled: false
   importAgents:

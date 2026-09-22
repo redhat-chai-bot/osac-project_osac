@@ -12,7 +12,6 @@ global:
       enabled: true
     maas:
       enabled: false
-
 # --- Operator ---
 operator:
   image:
@@ -37,13 +36,12 @@ operator:
   hubAccess:
     enabled: true
   tenants:
-  - name: shared
-  - name: osac-e2e-ci
-
+    - name: shared
+    - name: osac-e2e-ci
 # --- Fulfillment Service ---
 service:
-  externalHostname: ""  # Set dynamically by make install-osac
-  internalHostname: ""  # Set dynamically by make install-osac
+  externalHostname: "" # Set dynamically by make install-osac
+  internalHostname: "" # Set dynamically by make install-osac
   variant: openshift
   images:
     service: ghcr.io/osac-project/fulfillment-service:main
@@ -59,48 +57,48 @@ service:
     # (see charts/osac/values.yaml) -- correct automatically once
     # install-osac sets --set global.clusterDomain=$(DOMAIN).
     emergencyServiceAccounts:
-    - admin
-    - osac-operator
-    - osac-operator-controller-manager
-    - template-publisher
-    - osac-metering
+      - admin
+      - osac-operator
+      - osac-operator-controller-manager
+      - template-publisher
+      - osac-metering
     controllerCredentials:
-    - secret:
-        name: fulfillment-controller-credentials
-        items:
-        - key: client-id
-          param: client-id
-        - key: client-secret
-          param: client-secret
+      - secret:
+          name: fulfillment-controller-credentials
+          items:
+            - key: client-id
+              param: client-id
+            - key: client-secret
+              param: client-secret
   idp:
     provider: keycloak
     # url defaults to a global.clusterDomain-backed external route URL (see
     # charts/osac/values.yaml) -- correct automatically once install-osac
     # sets --set global.clusterDomain=$(DOMAIN).
     credentials:
-    - secret:
-        name: fulfillment-controller-credentials
-        items:
-        - key: client-id
-          param: client-id
-        - key: client-secret
-          param: client-secret
+      - secret:
+          name: fulfillment-controller-credentials
+          items:
+            - key: client-id
+              param: client-id
+            - key: client-secret
+              param: client-secret
   database:
     connection:
-    - secret:
-        name: osac-db-config
-        items:
-        - key: url
-          param: url
-    - secret:
-        name: osac-db-client-cert
-        items:
-        - key: tls.crt
-          param: sslcert
-        - key: tls.key
-          param: sslkey
-        - key: ca.crt
-          param: sslrootcert
+      - secret:
+          name: osac-db-config
+          items:
+            - key: url
+              param: url
+      - secret:
+          name: osac-db-client-cert
+          items:
+            - key: tls.crt
+              param: sslcert
+            - key: tls.key
+              param: sslkey
+            - key: ca.crt
+              param: sslrootcert
   log:
     level: debug
   vault:
@@ -115,12 +113,11 @@ service:
     caBundle:
       configMap: ca-bundle
     credentials:
-    - secret:
-        name: fulfillment-controller-credentials
-        items:
-        - key: client-secret
-          param: client-secret
-
+      - secret:
+          name: fulfillment-controller-credentials
+          items:
+            - key: client-secret
+              param: client-secret
 # --- UI ---
 ui:
   enabled: true
@@ -135,7 +132,6 @@ ui:
     certs:
       caBundle:
         configMap: ca-bundle
-
 # --- AAP ---
 aap:
   aap:
@@ -156,13 +152,11 @@ aap:
     # too is tracked separately (OSAC-3545), since it lives in
     # osac-test-infra, not this repo.
     eeImage: "ghcr.io/osac-project/osac-aap:latest"
-    projectGitUri: "https://github.com/osac-project/osac"
-    projectGitBranch: "main"
-
+    projectGitUri: "https://github.com/redhat-chai-bot/osac-project_osac"
+    projectGitBranch: "9d35d0cebc53f92ac1a026fde8ff40af873201fd"
 # --- Validation ---
 validation:
   enabled: true
-
 # --- Bare Metal Fulfillment Operator ---
 bmf:
   image:
@@ -177,21 +171,17 @@ bmf:
     enabled: true
     namespace: host-inventory
     hostClass: metal3
-
 # --- Hub Access ---
 hubAccess:
   enabled: true
-
 networkManagers:
   - name: netris
     role: fabric
     description: "Netris SDN fabric manager"
     capabilities: "ipv4"
-
 # --- LVMS StorageBackend registration ---
 lvms:
   enabled: true
-
 # Bundled PostgreSQL: single-pod ephemeral database for testing.
 # Uses fsync=off — data is lost on restart. Not for production.
 bundledPostgres:

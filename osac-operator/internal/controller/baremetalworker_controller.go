@@ -341,13 +341,12 @@ func (r *BareMetalWorkerReconciler) reconcileWorker(
 		return workerReconcileResult{exhausted: true}, nil
 	}
 
-	// If BMIName is empty but we have prior attempts, the old BMI was
-	// successfully deleted but the subsequent CreateBMI failed transiently.
-	// Skip readiness/registration checks (there is no BMI to check) and go
-	// directly to creation.
-	if worker.BMIName == "" && worker.AttemptCount > 0 {
-		log.Info("worker has empty BMIName after prior attempt, retrying BMI creation",
-			"workerID", worker.WorkerID, "attemptCount", worker.AttemptCount)
+	// If BMIName is empty, the old BMI was successfully deleted but the
+	// subsequent CreateBMI failed. Skip readiness/registration checks
+	// (there is no BMI to check) and go directly to creation.
+	if worker.BMIName == "" {
+		log.Info("worker has empty BMIName, retrying BMI creation",
+			"workerID", worker.WorkerID)
 		return r.createReplacementBMI(ctx, instance, worker)
 	}
 

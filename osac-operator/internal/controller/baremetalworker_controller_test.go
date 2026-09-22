@@ -945,11 +945,10 @@ var _ = Describe("BareMetalWorkerReconciler", func() {
 		})
 
 		Context("empty BMIName recovery", func() {
-			It("should create BMI directly when BMIName is empty and AttemptCount > 0", func() {
-				// When DeleteBMI succeeds but CreateBMI fails transiently,
-				// the worker ends up with BMIName="" and AttemptCount > 0.
-				// On the next reconcile, the controller must skip delete and
-				// go directly to creation.
+			It("should create BMI directly when BMIName is empty", func() {
+				// When DeleteBMI succeeds but CreateBMI fails, the worker
+				// ends up with BMIName="". On the next reconcile, the
+				// controller must skip delete and go directly to creation.
 				bmiProvider.nextCreateName = "recovered-bmi"
 				instance := newClusterOrderWithWorkers([]v1alpha1.WorkerStatus{
 					{
@@ -1000,11 +999,11 @@ var _ = Describe("BareMetalWorkerReconciler", func() {
 				Expect(instance.Status.Workers[0].BMIName).To(BeEmpty())
 			})
 
-			It("should not trigger recovery path when BMIName is empty and AttemptCount is 0", func() {
-				// A brand-new worker with empty BMIName and AttemptCount=0 is
-				// not a recovery case — it should follow the normal path.
-				bmiProvider.isReady = false
-				bmiProvider.regTime = time.Time{}
+			It("should trigger recovery path when BMIName is empty even with AttemptCount 0", func() {
+				// An empty BMIName means the old BMI was deleted but
+				// CreateBMI failed. The recovery path must fire
+				// regardless of AttemptCount.
+				bmiProvider.nextCreateName = "recovered-bmi"
 				instance := newClusterOrderWithWorkers([]v1alpha1.WorkerStatus{
 					{
 						WorkerID:     "worker-1",
@@ -1014,10 +1013,12 @@ var _ = Describe("BareMetalWorkerReconciler", func() {
 					},
 				})
 
-				_, err := reconciler.ReconcileWorkers(ctx, instance)
+				result, err := reconciler.ReconcileWorkers(ctx, instance)
 				Expect(err).NotTo(HaveOccurred())
-				// Should NOT have created a BMI via the recovery path
-				Expect(bmiProvider.createCalls).To(Equal(0))
+				Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+				// Must have created a BMI via the recovery path
+				Expect(bmiProvider.createCalls).To(Equal(1))
+				Expect(instance.Status.Workers[0].BMIName).To(Equal("recovered-bmi"))
 			})
 		})
 

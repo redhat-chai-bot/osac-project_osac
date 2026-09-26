@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.core.grpc_client import PRIVATE_API, GRPCClient
+from tests.e2e.core.helpers import wait_for_subnet_grpc_ready
 from tests.e2e.core.runner import env
 
 BMI_DISK_IMAGE_SOURCE_REF = "oci://quay.io/osac-project/fedora-cloud-bmi:44"
@@ -81,3 +82,17 @@ def catalog_item(
         print(f"CatalogItem {item_id} deleted")
     except Exception as e:
         print(f"WARNING: Failed to delete catalog item {item_id}: {e}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _bmaas_subnets_api_ready(grpc: GRPCClient) -> None:
+    """Wait for every tenant subnet to reach SUBNET_STATE_READY in the gRPC API.
+
+    The K8s Subnet CR may report Ready before the fulfillment-service database
+    is updated.  BMaaS tests that create BareMetalInstances without explicit
+    subnet IDs rely on the default subnet being auto-attached, which fails with
+    FailedPrecondition when the subnet is still SUBNET_STATE_PENDING in the
+    fulfillment database.
+    """
+    for subnet_id in grpc.list_subnet_ids():
+        wait_for_subnet_grpc_ready(grpc=grpc, subnet_id=subnet_id)

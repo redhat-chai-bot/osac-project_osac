@@ -39,7 +39,8 @@ var agentGVK = schema.GroupVersionKind{
 
 const (
 	agentClusterOrderLabel   = "osac.openshift.io/clusterorder"
-	agentResourceClassLabel  = "osac.openshift.io/resource_class"
+	agentInstanceTypeLabel   = "osac.openshift.io/baremetal_instance_type"
+	agentResourceClassLabel  = "osac.openshift.io/resource_class" // Deprecated: use agentInstanceTypeLabel
 	agentServerNameLabel     = "netris.server/name"
 	agentClaimedByHypershift = "agent-install.openshift.io/clusterdeployment-namespace"
 
@@ -68,7 +69,7 @@ func (r *ClusterOrderReconciler) reconcileAgentSelection(
 				continue
 			}
 			for _, nr := range instance.Spec.NodeRequests {
-				if nr.ResourceClass == instance.Status.NodeSets[i].Name && nr.FabricInterface != "" {
+				if nr.EffectiveInstanceType() == instance.Status.NodeSets[i].Name && nr.FabricInterface != "" {
 					instance.Status.NodeSets[i].FabricInterface = nr.FabricInterface
 					break
 				}
@@ -85,14 +86,15 @@ func (r *ClusterOrderReconciler) reconcileAgentSelection(
 	var nodeSets []v1alpha1.NodeSetStatus
 
 	for _, nodeReq := range instance.Spec.NodeRequests {
-		agents, err := r.selectAgents(ctx, agentNamespace, instance.Name, nodeReq.ResourceClass, nodeReq.NumberOfNodes)
+		instanceType := nodeReq.EffectiveInstanceType()
+		agents, err := r.selectAgents(ctx, agentNamespace, instance.Name, instanceType, nodeReq.NumberOfNodes)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
 		if len(agents) < nodeReq.NumberOfNodes {
 			log.Info("not enough agents available, requeueing",
-				"resourceClass", nodeReq.ResourceClass,
+				"instanceType", instanceType,
 				"requested", nodeReq.NumberOfNodes,
 				"available", len(agents),
 			)
@@ -116,7 +118,7 @@ func (r *ClusterOrderReconciler) reconcileAgentSelection(
 		}
 
 		nodeSets = append(nodeSets, v1alpha1.NodeSetStatus{
-			Name:            nodeReq.ResourceClass,
+			Name:            instanceType,
 			FabricInterface: nodeReq.FabricInterface,
 			Agents:          agentStatuses,
 		})
@@ -141,11 +143,14 @@ func (r *ClusterOrderReconciler) selectAgents(
 		return alreadyLabeled[:count], nil
 	}
 
-	// Find available agents (matching resource class, not allocated)
+	// Find available agents matching the instance type.
+	// During the transition period, agents may carry either the new
+	// agentInstanceTypeLabel or the deprecated agentResourceClassLabel.
+	// Try the new label first; fall back to the old one.
 	selector := labels.NewSelector()
-	rcReq, err := labels.NewRequirement(agentResourceClassLabel, selection.Equals, []string{resourceClass})
+	rcReq, err := labels.NewRequirement(agentInstanceTypeLabel, selection.Equals, []string{resourceClass})
 	if err != nil {
-		return nil, fmt.Errorf("invalid resource class %q for label selector: %w", resourceClass, err)
+		return nil, fmt.Errorf("invalid instance type %q for label selector: %w", resourceClass, err)
 	}
 	selector = selector.Add(*rcReq)
 	noClusterOrder, err := labels.NewRequirement(agentClusterOrderLabel, selection.DoesNotExist, nil)
@@ -170,7 +175,7 @@ func (r *ClusterOrderReconciler) selectAgents(
 		client.InNamespace(namespace),
 		client.MatchingLabelsSelector{Selector: selector},
 	); err != nil {
-		return nil, fmt.Errorf("listing available agents for resource class %s: %w", resourceClass, err)
+		return nil, fmt.Errorf("listing available agents for instance type %s: %w", resourceClass, err)
 	}
 
 	// Combine already-labeled + newly available, up to count
@@ -182,16 +187,55 @@ func (r *ClusterOrderReconciler) selectAgents(
 		result = append(result, &agentList.Items[i])
 	}
 
+	// Fallback: if we still need more agents, try the deprecated label
+	if len(result) < count {
+		fallbackSelector := labels.NewSelector()
+		rcFallback, err := labels.NewRequirement(agentResourceClassLabel, selection.Equals, []string{resourceClass})
+		if err != nil {
+			return nil, fmt.Errorf("building fallback label requirement: %w", err)
+		}
+		fallbackSelector = fallbackSelector.Add(*rcFallback)
+		// Exclude agents that already carry the new label (already found above)
+		noNewLabel, err := labels.NewRequirement(agentInstanceTypeLabel, selection.DoesNotExist, nil)
+		if err != nil {
+			return nil, fmt.Errorf("building label requirement: %w", err)
+		}
+		fallbackSelector = fallbackSelector.Add(*noNewLabel)
+		fallbackSelector = fallbackSelector.Add(*noClusterOrder)
+		fallbackSelector = fallbackSelector.Add(*noClaimed)
+
+		fallbackList := &unstructured.UnstructuredList{}
+		fallbackList.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   agentGVK.Group,
+			Version: agentGVK.Version,
+			Kind:    agentGVK.Kind + "List",
+		})
+		if err := r.Client.List(ctx, fallbackList,
+			client.InNamespace(namespace),
+			client.MatchingLabelsSelector{Selector: fallbackSelector},
+		); err != nil {
+			return nil, fmt.Errorf("listing available agents (fallback) for instance type %s: %w", resourceClass, err)
+		}
+		for i := range fallbackList.Items {
+			if len(result) >= count {
+				break
+			}
+			result = append(result, &fallbackList.Items[i])
+		}
+	}
+
 	return result, nil
 }
 
 // listAgentsForClusterOrder returns agents already labeled for this cluster order.
+// Checks both the new instance type label and the deprecated resource class label.
 func (r *ClusterOrderReconciler) listAgentsForClusterOrder(
 	ctx context.Context, namespace, clusterOrderName, resourceClass string,
 ) ([]*unstructured.Unstructured, error) {
+	// Try new label first
 	matchLabels := map[string]string{
-		agentClusterOrderLabel:  clusterOrderName,
-		agentResourceClassLabel: resourceClass,
+		agentClusterOrderLabel: clusterOrderName,
+		agentInstanceTypeLabel: resourceClass,
 	}
 
 	agentList := &unstructured.UnstructuredList{}
@@ -212,6 +256,34 @@ func (r *ClusterOrderReconciler) listAgentsForClusterOrder(
 	for i := range agentList.Items {
 		result = append(result, &agentList.Items[i])
 	}
+
+	// Fallback: also check agents labeled with the deprecated resource class label
+	fallbackLabels := map[string]string{
+		agentClusterOrderLabel:  clusterOrderName,
+		agentResourceClassLabel: resourceClass,
+	}
+	fallbackList := &unstructured.UnstructuredList{}
+	fallbackList.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   agentGVK.Group,
+		Version: agentGVK.Version,
+		Kind:    agentGVK.Kind + "List",
+	})
+	if err := r.Client.List(ctx, fallbackList,
+		client.InNamespace(namespace),
+		client.MatchingLabels(fallbackLabels),
+	); err != nil {
+		return nil, fmt.Errorf("listing agents (fallback) for cluster order %s: %w", clusterOrderName, err)
+	}
+	seen := make(map[string]struct{}, len(result))
+	for _, a := range result {
+		seen[a.GetName()] = struct{}{}
+	}
+	for i := range fallbackList.Items {
+		if _, dup := seen[fallbackList.Items[i].GetName()]; !dup {
+			result = append(result, &fallbackList.Items[i])
+		}
+	}
+
 	return result, nil
 }
 

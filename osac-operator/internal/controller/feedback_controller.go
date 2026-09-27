@@ -390,13 +390,13 @@ func syncClusterOrderNodeRequests(ctx context.Context, clusterOrder *ckv1alpha1.
 			if rc == "" {
 				rc = candidateNodeSet.GetHostType().GetName()
 			}
-			if rc == nodeRequest.ResourceClass {
+			if rc == nodeRequest.EffectiveInstanceType() {
 				nodeSetID = candidateNodeSetID
 				break
 			}
 		}
 		if nodeSetID == "" {
-			log.Error(nil, "Failed to find a matching node set", "resource_class", nodeRequest.ResourceClass)
+			log.Error(nil, "Failed to find a matching node set", "instance_type", nodeRequest.EffectiveInstanceType())
 			continue
 		}
 
@@ -409,7 +409,7 @@ func syncClusterOrderNodeRequests(ctx context.Context, clusterOrder *ckv1alpha1.
 		if nodeSet == nil {
 			nodeSet = privatev1.ClusterNodeSet_builder{
 				BaremetalInstanceType: privatev1.BareMetalInstanceTypeLocalReference_builder{
-					Name: nodeRequest.ResourceClass,
+					Name: nodeRequest.EffectiveInstanceType(),
 				}.Build(),
 			}.Build()
 			nodeSets[nodeSetID] = nodeSet
@@ -419,7 +419,7 @@ func syncClusterOrderNodeRequests(ctx context.Context, clusterOrder *ckv1alpha1.
 		newValue := int32(nodeRequest.NumberOfNodes)
 		if newValue != oldValue {
 			log.Info("Updating node set size",
-				"resource_class", nodeRequest.ResourceClass,
+				"instance_type", nodeRequest.EffectiveInstanceType(),
 				"old_value", oldValue,
 				"new_value", newValue,
 			)

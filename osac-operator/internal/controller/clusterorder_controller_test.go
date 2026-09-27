@@ -39,9 +39,9 @@ import (
 	"github.com/osac-project/osac/osac-operator/pkg/provisioning"
 )
 
-func readyClusterOrderNodePool(resourceClass string, replicas int32) hypershiftv1beta1.NodePool {
+func readyClusterOrderNodePool(instanceType string, replicas int32) hypershiftv1beta1.NodePool {
 	return hypershiftv1beta1.NodePool{
-		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: resourceClass}},
+		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: instanceType}},
 		Status: hypershiftv1beta1.NodePoolStatus{
 			Replicas: replicas,
 			Conditions: []hypershiftv1beta1.NodePoolCondition{
@@ -564,7 +564,7 @@ var _ = Describe("ClusterOrder Controller", func() {
 					}},
 				},
 				Spec: v1alpha1.ClusterOrderSpec{
-					NodeRequests: []v1alpha1.NodeRequest{{ResourceClass: "worker", NumberOfNodes: 1}},
+					NodeRequests: []v1alpha1.NodeRequest{{BareMetalInstanceType: "worker", NumberOfNodes: 1}},
 				},
 			}
 			hc := &hypershiftv1beta1.HostedCluster{Status: hypershiftv1beta1.HostedClusterStatus{Conditions: []metav1.Condition{
@@ -594,7 +594,7 @@ var _ = Describe("ClusterOrder Controller", func() {
 					}},
 				},
 				Spec: v1alpha1.ClusterOrderSpec{
-					NodeRequests: []v1alpha1.NodeRequest{{ResourceClass: "worker", NumberOfNodes: 1}},
+					NodeRequests: []v1alpha1.NodeRequest{{BareMetalInstanceType: "worker", NumberOfNodes: 1}},
 				},
 			}
 			hc := &hypershiftv1beta1.HostedCluster{
@@ -612,7 +612,7 @@ var _ = Describe("ClusterOrder Controller", func() {
 				Namespace: "default",
 				Labels: map[string]string{
 					osacClusterOrderNameLabel: instance.Name,
-					agentResourceClassLabel:   "worker",
+					agentInstanceTypeLabel:    "worker",
 				},
 			}
 			reconciler.Client = fake.NewClientBuilder().
@@ -632,31 +632,31 @@ var _ = Describe("ClusterOrder Controller", func() {
 				Expect(nodePoolsMatchRequests(requests, nodePools)).To(Equal(expected))
 			},
 			Entry("all pools match", []v1alpha1.NodeRequest{
-				{ResourceClass: "gpu", NumberOfNodes: 2},
-				{ResourceClass: "worker", NumberOfNodes: 3},
+				{BareMetalInstanceType: "gpu", NumberOfNodes: 2},
+				{BareMetalInstanceType: "worker", NumberOfNodes: 3},
 			}, []hypershiftv1beta1.NodePool{
 				readyClusterOrderNodePool("gpu", 2), readyClusterOrderNodePool("worker", 3),
 			}, true),
 			Entry("one pool is under capacity", []v1alpha1.NodeRequest{
-				{ResourceClass: "gpu", NumberOfNodes: 2},
-				{ResourceClass: "worker", NumberOfNodes: 3},
+				{BareMetalInstanceType: "gpu", NumberOfNodes: 2},
+				{BareMetalInstanceType: "worker", NumberOfNodes: 3},
 			}, []hypershiftv1beta1.NodePool{
 				readyClusterOrderNodePool("gpu", 1), readyClusterOrderNodePool("worker", 3),
 			}, false),
 			Entry("one pool is over capacity", []v1alpha1.NodeRequest{
-				{ResourceClass: "gpu", NumberOfNodes: 2},
-				{ResourceClass: "worker", NumberOfNodes: 3},
+				{BareMetalInstanceType: "gpu", NumberOfNodes: 2},
+				{BareMetalInstanceType: "worker", NumberOfNodes: 3},
 			}, []hypershiftv1beta1.NodePool{
 				readyClusterOrderNodePool("gpu", 3), readyClusterOrderNodePool("worker", 3),
 			}, false),
 			Entry("duplicate resource classes do not collapse", []v1alpha1.NodeRequest{
-				{ResourceClass: "worker", NumberOfNodes: 1},
-				{ResourceClass: "worker", NumberOfNodes: 5},
+				{BareMetalInstanceType: "worker", NumberOfNodes: 1},
+				{BareMetalInstanceType: "worker", NumberOfNodes: 5},
 			}, []hypershiftv1beta1.NodePool{
 				readyClusterOrderNodePool("worker", 5),
 			}, false),
 			Entry("duplicate node pool resource classes do not match", []v1alpha1.NodeRequest{
-				{ResourceClass: "worker", NumberOfNodes: 1},
+				{BareMetalInstanceType: "worker", NumberOfNodes: 1},
 			}, []hypershiftv1beta1.NodePool{
 				readyClusterOrderNodePool("worker", 1), readyClusterOrderNodePool("worker", 1),
 			}, false),
@@ -1019,13 +1019,13 @@ var _ = Describe("ClusterOrder Controller", func() {
 			instance := &v1alpha1.ClusterOrder{
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 3},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 3},
 					},
 				},
 			}
 
 			nodePool := &hypershiftv1beta1.NodePool{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.large"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.large"}},
 				Status: hypershiftv1beta1.NodePoolStatus{
 					Replicas: 5,
 				},
@@ -1041,7 +1041,7 @@ var _ = Describe("ClusterOrder Controller", func() {
 
 			Expect(instance.Status.NodeRequests).To(HaveLen(1),
 				"status.nodeRequests should have exactly one entry")
-			Expect(instance.Status.NodeRequests[0].ResourceClass).To(Equal("m1.large"))
+			Expect(instance.Status.NodeRequests[0].BareMetalInstanceType).To(Equal("m1.large"))
 			Expect(instance.Status.NodeRequests[0].NumberOfNodes).To(Equal(5),
 				"status.nodeRequests[0].numberOfNodes should reflect observed replicas")
 		})
@@ -1050,18 +1050,18 @@ var _ = Describe("ClusterOrder Controller", func() {
 			instance := &v1alpha1.ClusterOrder{
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 3},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 3},
 					},
 				},
 				Status: v1alpha1.ClusterOrderStatus{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 2},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 2},
 					},
 				},
 			}
 
 			nodePool := &hypershiftv1beta1.NodePool{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.large"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.large"}},
 				Status: hypershiftv1beta1.NodePoolStatus{
 					Replicas: 5,
 				},
@@ -1080,29 +1080,29 @@ var _ = Describe("ClusterOrder Controller", func() {
 			instance := &v1alpha1.ClusterOrder{
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 3},
-						{ResourceClass: "m1.small", NumberOfNodes: 1},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 3},
+						{BareMetalInstanceType: "m1.small", NumberOfNodes: 1},
 					},
 				},
 			}
 
 			nodePools := &hypershiftv1beta1.NodePoolList{Items: []hypershiftv1beta1.NodePool{
 				{
-					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.small"}},
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.small"}},
 					Status: hypershiftv1beta1.NodePoolStatus{
 						Replicas: 2,
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.large"}},
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.large"}},
 					Status: hypershiftv1beta1.NodePoolStatus{
 						Replicas: 4,
 					},
 				},
 			}}
 			status := []v1alpha1.NodeRequest{
-				{ResourceClass: "m1.large", NumberOfNodes: 0},
-				{ResourceClass: "m1.small", NumberOfNodes: 0},
+				{BareMetalInstanceType: "m1.large", NumberOfNodes: 0},
+				{BareMetalInstanceType: "m1.small", NumberOfNodes: 0},
 			}
 			instance.Status.NodeRequests = status
 
@@ -1110,8 +1110,8 @@ var _ = Describe("ClusterOrder Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(instance.Status.NodeRequests).To(ConsistOf(
-				v1alpha1.NodeRequest{ResourceClass: "m1.large", NumberOfNodes: 4},
-				v1alpha1.NodeRequest{ResourceClass: "m1.small", NumberOfNodes: 2},
+				v1alpha1.NodeRequest{BareMetalInstanceType: "m1.large", NumberOfNodes: 4},
+				v1alpha1.NodeRequest{BareMetalInstanceType: "m1.small", NumberOfNodes: 2},
 			))
 		})
 
@@ -1119,18 +1119,18 @@ var _ = Describe("ClusterOrder Controller", func() {
 			instance := &v1alpha1.ClusterOrder{
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 3},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 3},
 					},
 				},
 				Status: v1alpha1.ClusterOrderStatus{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 5},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 5},
 					},
 				},
 			}
 
 			nodePool := &hypershiftv1beta1.NodePool{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.large"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.large"}},
 				Status: hypershiftv1beta1.NodePoolStatus{
 					Replicas: 5,
 				},
@@ -1260,13 +1260,13 @@ var _ = Describe("ClusterOrder Controller", func() {
 			instance := &v1alpha1.ClusterOrder{
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 3},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 3},
 					},
 				},
 			}
 
 			nodePool := &hypershiftv1beta1.NodePool{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.large"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.large"}},
 				Status: hypershiftv1beta1.NodePoolStatus{
 					Replicas: 5,
 				},
@@ -1282,7 +1282,7 @@ var _ = Describe("ClusterOrder Controller", func() {
 
 			Expect(instance.Status.NodeRequests).To(HaveLen(1),
 				"status.nodeRequests should have exactly one entry")
-			Expect(instance.Status.NodeRequests[0].ResourceClass).To(Equal("m1.large"))
+			Expect(instance.Status.NodeRequests[0].BareMetalInstanceType).To(Equal("m1.large"))
 			Expect(instance.Status.NodeRequests[0].NumberOfNodes).To(Equal(5),
 				"status.nodeRequests[0].numberOfNodes should reflect observed replicas")
 		})
@@ -1291,18 +1291,18 @@ var _ = Describe("ClusterOrder Controller", func() {
 			instance := &v1alpha1.ClusterOrder{
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 3},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 3},
 					},
 				},
 				Status: v1alpha1.ClusterOrderStatus{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 2},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 2},
 					},
 				},
 			}
 
 			nodePool := &hypershiftv1beta1.NodePool{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.large"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.large"}},
 				Status: hypershiftv1beta1.NodePoolStatus{
 					Replicas: 5,
 				},
@@ -1321,29 +1321,29 @@ var _ = Describe("ClusterOrder Controller", func() {
 			instance := &v1alpha1.ClusterOrder{
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 3},
-						{ResourceClass: "m1.small", NumberOfNodes: 1},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 3},
+						{BareMetalInstanceType: "m1.small", NumberOfNodes: 1},
 					},
 				},
 			}
 
 			nodePool := &hypershiftv1beta1.NodePool{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.small"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.small"}},
 				Status: hypershiftv1beta1.NodePoolStatus{
 					Replicas: 2,
 				},
 			}
 			instance.Status.NodeRequests = []v1alpha1.NodeRequest{
-				{ResourceClass: "m1.large", NumberOfNodes: 0},
-				{ResourceClass: "m1.small", NumberOfNodes: 0},
+				{BareMetalInstanceType: "m1.large", NumberOfNodes: 0},
+				{BareMetalInstanceType: "m1.small", NumberOfNodes: 0},
 			}
 
 			err := reconciler.handleNodePool(ctx, instance, nodePool)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(instance.Status.NodeRequests).To(ConsistOf(
-				v1alpha1.NodeRequest{ResourceClass: "m1.large", NumberOfNodes: 0},
-				v1alpha1.NodeRequest{ResourceClass: "m1.small", NumberOfNodes: 2},
+				v1alpha1.NodeRequest{BareMetalInstanceType: "m1.large", NumberOfNodes: 0},
+				v1alpha1.NodeRequest{BareMetalInstanceType: "m1.small", NumberOfNodes: 2},
 			))
 		})
 
@@ -1351,18 +1351,18 @@ var _ = Describe("ClusterOrder Controller", func() {
 			instance := &v1alpha1.ClusterOrder{
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 3},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 3},
 					},
 				},
 				Status: v1alpha1.ClusterOrderStatus{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "m1.large", NumberOfNodes: 5},
+						{BareMetalInstanceType: "m1.large", NumberOfNodes: 5},
 					},
 				},
 			}
 
 			nodePool := &hypershiftv1beta1.NodePool{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.large"}},
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "m1.large"}},
 				Status: hypershiftv1beta1.NodePoolStatus{
 					Replicas: 5,
 				},
@@ -1449,7 +1449,7 @@ var _ = Describe("ClusterOrder Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "fc430", NumberOfNodes: 2},
+						{BareMetalInstanceType: "fc430", NumberOfNodes: 2},
 					},
 				},
 			}
@@ -1480,7 +1480,7 @@ var _ = Describe("ClusterOrder Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "fc430", NumberOfNodes: 3},
+						{BareMetalInstanceType: "fc430", NumberOfNodes: 3},
 					},
 				},
 			}
@@ -1496,7 +1496,7 @@ var _ = Describe("ClusterOrder Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-cluster"},
 				Spec: v1alpha1.ClusterOrderSpec{
 					NodeRequests: []v1alpha1.NodeRequest{
-						{ResourceClass: "fc430", NumberOfNodes: 1},
+						{BareMetalInstanceType: "fc430", NumberOfNodes: 1},
 					},
 				},
 				Status: v1alpha1.ClusterOrderStatus{
@@ -1557,6 +1557,61 @@ var _ = Describe("ClusterOrder Controller", func() {
 				}, agent)).To(Succeed())
 				Expect(agent.GetLabels()).NotTo(HaveKey(agentClusterOrderLabel))
 			}
+		})
+	})
+
+	Context("EffectiveInstanceType backward compatibility", func() {
+		It("returns BareMetalInstanceType when set", func() {
+			nr := v1alpha1.NodeRequest{BareMetalInstanceType: "fc430", NumberOfNodes: 1}
+			Expect(nr.EffectiveInstanceType()).To(Equal("fc430"))
+		})
+
+		It("falls back to ResourceClass when BareMetalInstanceType is empty", func() {
+			nr := v1alpha1.NodeRequest{ResourceClass: "m1.large", NumberOfNodes: 1}
+			Expect(nr.EffectiveInstanceType()).To(Equal("m1.large"))
+		})
+
+		It("prefers BareMetalInstanceType over ResourceClass when both are set", func() {
+			nr := v1alpha1.NodeRequest{
+				BareMetalInstanceType: "fc430",
+				ResourceClass:         "m1.large",
+				NumberOfNodes:         1,
+			}
+			Expect(nr.EffectiveInstanceType()).To(Equal("fc430"))
+		})
+
+		It("nodePoolInstanceType reads the new label", func() {
+			np := &hypershiftv1beta1.NodePool{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentInstanceTypeLabel: "fc430"}},
+			}
+			it, ok := nodePoolInstanceType(np)
+			Expect(ok).To(BeTrue())
+			Expect(it).To(Equal("fc430"))
+		})
+
+		It("nodePoolInstanceType falls back to deprecated label", func() {
+			np := &hypershiftv1beta1.NodePool{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{agentResourceClassLabel: "m1.large"}},
+			}
+			it, ok := nodePoolInstanceType(np)
+			Expect(ok).To(BeTrue())
+			Expect(it).To(Equal("m1.large"))
+		})
+
+		It("nodePoolInstanceType returns false when neither label is set", func() {
+			np := &hypershiftv1beta1.NodePool{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{}},
+			}
+			_, ok := nodePoolInstanceType(np)
+			Expect(ok).To(BeFalse())
+		})
+
+		It("nodeRequestsContainDuplicateInstanceTypes uses EffectiveInstanceType", func() {
+			requests := []v1alpha1.NodeRequest{
+				{BareMetalInstanceType: "fc430", NumberOfNodes: 1},
+				{ResourceClass: "fc430", NumberOfNodes: 2},
+			}
+			Expect(nodeRequestsContainDuplicateInstanceTypes(requests)).To(BeTrue())
 		})
 	})
 

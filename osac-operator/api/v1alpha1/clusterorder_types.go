@@ -111,9 +111,16 @@ type ClusterNetworkAttachment struct {
 }
 
 type NodeRequest struct {
-	// ResourceClass describes the type of node you are requesting
-	// +kubebuilder:validation:Required
-	ResourceClass string `json:"resourceClass"`
+	// BareMetalInstanceType is the bare-metal instance type requested for
+	// this node set (e.g. "fc430", "m1.large"). Replaces the deprecated
+	// ResourceClass field.
+	// +kubebuilder:validation:Optional
+	BareMetalInstanceType string `json:"baremetalInstanceType,omitempty"`
+	// ResourceClass describes the type of node you are requesting.
+	// Deprecated: use BareMetalInstanceType instead. When both fields are
+	// set, BareMetalInstanceType takes precedence.
+	// +kubebuilder:validation:Optional
+	ResourceClass string `json:"resourceClass,omitempty"`
 	// NumberOfNodes describes the number of nodes you want of the given resource class
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=1
@@ -125,6 +132,16 @@ type NodeRequest struct {
 	// expansion; may also be set explicitly.
 	// +kubebuilder:validation:Optional
 	FabricInterface string `json:"fabricInterface,omitempty"`
+}
+
+// EffectiveInstanceType returns the instance type for this node request,
+// preferring BareMetalInstanceType when set and falling back to the
+// deprecated ResourceClass field for backward compatibility.
+func (nr *NodeRequest) EffectiveInstanceType() string {
+	if nr.BareMetalInstanceType != "" {
+		return nr.BareMetalInstanceType
+	}
+	return nr.ResourceClass
 }
 
 // ClusterOrderPhaseType is a valid value for .status.phase

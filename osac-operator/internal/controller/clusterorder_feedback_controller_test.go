@@ -1040,7 +1040,7 @@ var _ = Describe("ClusterOrder FeedbackReconciler", func() {
 			Expect(k8sClient.Get(testCtx, typeNamespacedName, clusterOrder)).To(Succeed())
 			clusterOrder.Status.Phase = osacv1alpha1.ClusterOrderPhaseReady
 			clusterOrder.Status.NodeRequests = []osacv1alpha1.NodeRequest{
-				{ResourceClass: "m5.xlarge", NumberOfNodes: 3},
+				{BareMetalInstanceType: "m5.xlarge", NumberOfNodes: 3},
 			}
 			Expect(k8sClient.Status().Update(testCtx, clusterOrder)).To(Succeed())
 

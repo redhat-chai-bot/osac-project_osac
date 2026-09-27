@@ -113,6 +113,12 @@ spec:
                   defaults. The selected template may limit what node types you can request.
                 items:
                   properties:
+                    baremetalInstanceType:
+                      description: |-
+                        BareMetalInstanceType is the bare-metal instance type requested for
+                        this node set (e.g. "fc430", "m1.large"). Replaces the deprecated
+                        ResourceClass field.
+                      type: string
                     fabricInterface:
                       description: |-
                         FabricInterface is the host NIC name used for tenant network traffic.
@@ -127,12 +133,13 @@ spec:
                       minimum: 1
                       type: integer
                     resourceClass:
-                      description: ResourceClass describes the type of node you are
-                        requesting
+                      description: |-
+                        ResourceClass describes the type of node you are requesting.
+                        Deprecated: use BareMetalInstanceType instead. When both fields are
+                        set, BareMetalInstanceType takes precedence.
                       type: string
                   required:
                   - numberOfNodes
-                  - resourceClass
                   type: object
                 type: array
               pullSecret:
@@ -336,6 +343,12 @@ spec:
                   with the ClusterOrder
                 items:
                   properties:
+                    baremetalInstanceType:
+                      description: |-
+                        BareMetalInstanceType is the bare-metal instance type requested for
+                        this node set (e.g. "fc430", "m1.large"). Replaces the deprecated
+                        ResourceClass field.
+                      type: string
                     fabricInterface:
                       description: |-
                         FabricInterface is the host NIC name used for tenant network traffic.
@@ -350,12 +363,13 @@ spec:
                       minimum: 1
                       type: integer
                     resourceClass:
-                      description: ResourceClass describes the type of node you are
-                        requesting
+                      description: |-
+                        ResourceClass describes the type of node you are requesting.
+                        Deprecated: use BareMetalInstanceType instead. When both fields are
+                        set, BareMetalInstanceType takes precedence.
                       type: string
                   required:
                   - numberOfNodes
-                  - resourceClass
                   type: object
                 type: array
               nodeSets:

@@ -44,7 +44,7 @@ var computeInstanceTransitions = TransitionTable{
 	{ComputeInstanceStateRunning, ComputeInstanceStateStopped}:     {EventType: EventSuspended},
 	{ComputeInstanceStateRunning, ComputeInstanceStatePaused}:      {EventType: EventSuspended},
 	{ComputeInstanceStateRunning, ComputeInstanceStateFailed}:      {EventType: EventSuspended},
-	{ComputeInstanceStateRunning, ComputeInstanceStateStopping}:    {Transient: true},
+	{ComputeInstanceStateRunning, ComputeInstanceStateStopping}:    {EventType: EventSuspended},
 	{ComputeInstanceStateRunning, ComputeInstanceStateStarting}:    {Transient: true},
 	{ComputeInstanceStateRunning, ComputeInstanceStateDeleting}:    {EventType: EventSuspended},
 	{ComputeInstanceStateRunning, ComputeInstanceStateUnspecified}: {EventType: EventSuspended},

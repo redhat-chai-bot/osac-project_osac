@@ -14,6 +14,28 @@ from tests.e2e.core.runner import env
 BMI_DISK_IMAGE_SOURCE_REF = "oci://quay.io/osac-project/fedora-cloud-bmi:44"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def ensure_bmaas_fabric_manager(ensure_k8s_only_network_class: None, private_grpc: GRPCClient) -> None:
+    """Ensure the default NetworkClass has a fabric_manager for BMaaS tests.
+
+    BareMetalInstance creation validates that the subnet's NetworkClass defines a
+    fabric_manager (``validateBareMetalSubnetFabricManager``).  Environments that
+    install with ``k8sManager: k8s_only`` (e.g. the full-ci profile) create a
+    NetworkClass without a fabric_manager, causing all BMaaS provisioning requests
+    to be rejected with ``FailedPrecondition``.
+
+    This fixture patches the first NetworkClass to add ``fabric_manager: netris``
+    when the field is absent, matching the bmaas-ci installer profile.  It is a
+    no-op when the fabric_manager is already set (e.g. Netris lab environments).
+    """
+    network_classes: list[dict[str, object]] = private_grpc.list_network_classes()
+    if not network_classes:
+        return
+    if network_classes[0].get("fabric_manager"):
+        return
+    private_grpc.update_network_class(network_class_id=str(network_classes[0]["id"]), fabric_manager="netris")
+
+
 @pytest.fixture(scope="session")
 def bmi_template() -> str:
     return env("OSAC_BMI_TEMPLATE", "bm-host-provisioning")

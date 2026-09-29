@@ -6,6 +6,7 @@ from uuid import uuid4
 from tests.e2e.core.grpc_client import GRPCClient
 from tests.e2e.core.helpers import (
     wait_for_security_group_deletion,
+    wait_for_subnet_api_ready,
     wait_for_subnet_cr,
     wait_for_subnet_deletion,
     wait_for_subnet_ready,
@@ -42,6 +43,7 @@ def create_and_wait_for_subnet(
         subnet: dict = grpc.get_subnet(subnet_id=subnet_id)
         assert subnet["object"]["metadata"]["name"] == subnet_name
         wait_for_subnet_ready(k8s=k8s_hub_client, name=subnet_cr_name)
+        wait_for_subnet_api_ready(grpc=grpc, subnet_id=subnet_id)
         return subnet_id, subnet_cr_name
     except Exception:
         delete_and_wait_for_subnet(grpc, k8s_hub_client, subnet_id, subnet_cr_name)

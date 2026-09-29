@@ -166,6 +166,34 @@ def wait_for_subnet_ready(*, k8s: K8sClient, name: str) -> None:
     )
 
 
+def wait_for_subnet_api_ready(*, grpc: GRPCClient, subnet_id: str) -> None:
+    """Poll the gRPC API until the subnet state is READY.
+
+    The K8s CR status may report Ready before the fulfillment-service database
+    has been updated by the controller feedback loop.  Polling via gRPC closes
+    this race so that subsequent resource creation that depends on a ready
+    subnet (e.g. BareMetalInstance) does not hit FailedPrecondition.
+    """
+
+    def _state() -> str:
+        try:
+            subnet = grpc.get_subnet(subnet_id=subnet_id)
+        except subprocess.CalledProcessError:
+            return ""
+        state = subnet.get("object", {}).get("status", {}).get("state", "")
+        if state == "SUBNET_STATE_FAILED":
+            raise AssertionError(f"Subnet {subnet_id} entered SUBNET_STATE_FAILED")
+        return state
+
+    poll_until(
+        fn=_state,
+        until=lambda v: v == "SUBNET_STATE_READY",
+        retries=30,
+        delay=2,
+        description=f"Subnet {subnet_id} gRPC READY",
+    )
+
+
 def wait_for_subnet_deletion(*, k8s: K8sClient, name: str) -> None:
     poll_until(
         fn=lambda: not k8s.is_present(resource="subnet", name=name),

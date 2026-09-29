@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.core.grpc_client import PRIVATE_API, GRPCClient
+from tests.e2e.core.helpers import wait_for_subnet_api_ready
 from tests.e2e.core.runner import env
 
 BMI_DISK_IMAGE_SOURCE_REF = "oci://quay.io/osac-project/fedora-cloud-bmi:44"
@@ -81,3 +82,16 @@ def catalog_item(
         print(f"CatalogItem {item_id} deleted")
     except Exception as e:
         print(f"WARNING: Failed to delete catalog item {item_id}: {e}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _bmaas_subnets_api_ready(grpc: GRPCClient) -> None:
+    """Ensure all subnets report READY via the gRPC API before BMaaS tests.
+
+    The K8s CR may show phase=Ready before the fulfillment-controller syncs
+    the state to the database.  Without this gate, BareMetalInstance creation
+    can hit FailedPrecondition because the gRPC API still reports
+    SUBNET_STATE_UNSPECIFIED.
+    """
+    for subnet_id in grpc.list_subnet_ids():
+        wait_for_subnet_api_ready(grpc=grpc, subnet_id=subnet_id)

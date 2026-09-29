@@ -1181,6 +1181,18 @@ func selectClusterFabricInterface(hostType *privatev1.HostType) (string, error) 
 	return "", fmt.Errorf("host type '%s' has no interface with role 'fabric'", hostType.GetId())
 }
 
+// clusterEndpointSuffix returns a short, deterministic suffix for the given attachment endpoint.
+func clusterEndpointSuffix(endpoint privatev1.ExternalIPAttachmentEndpoint) string {
+	switch endpoint {
+	case privatev1.ExternalIPAttachmentEndpoint_EXTERNAL_IP_ATTACHMENT_ENDPOINT_API:
+		return "api"
+	case privatev1.ExternalIPAttachmentEndpoint_EXTERNAL_IP_ATTACHMENT_ENDPOINT_INGRESS:
+		return "ingress"
+	default:
+		return "unknown"
+	}
+}
+
 // autoProvisionExternalIPs creates two ExternalIPs and two ExternalIPAttachments
 // (one for API, one for ingress) from the best available pool.
 func (s *PrivateClustersServer) autoProvisionExternalIPs(ctx context.Context, cluster *privatev1.Cluster) error {
@@ -1196,6 +1208,10 @@ func (s *PrivateClustersServer) autoProvisionExternalIPs(ctx context.Context, cl
 
 	tenant := cluster.GetMetadata().GetTenant()
 	clusterID := cluster.GetId()
+	shortID := clusterID
+	if len(shortID) > 8 {
+		shortID = shortID[:8]
+	}
 
 	endpoints := []privatev1.ExternalIPAttachmentEndpoint{
 		privatev1.ExternalIPAttachmentEndpoint_EXTERNAL_IP_ATTACHMENT_ENDPOINT_API,
@@ -1203,8 +1219,13 @@ func (s *PrivateClustersServer) autoProvisionExternalIPs(ctx context.Context, cl
 	}
 
 	for _, endpoint := range endpoints {
+		suffix := clusterEndpointSuffix(endpoint)
+		eipName := fmt.Sprintf("auto-eip-%s-%s", shortID, suffix)
+		eipaName := fmt.Sprintf("auto-eipa-%s-%s", shortID, suffix)
+
 		eip := privatev1.ExternalIP_builder{
 			Metadata: privatev1.Metadata_builder{
+				Name:   eipName,
 				Tenant: tenant,
 				Labels: map[string]string{
 					autoCreatedLabel:    "true",
@@ -1223,17 +1244,38 @@ func (s *PrivateClustersServer) autoProvisionExternalIPs(ctx context.Context, cl
 			}.Build(),
 		}.Build()
 
+		var eipID string
 		eipResp, err := s.externalIPDao.Create().SetObject(eip).Do(ctx)
 		if err != nil {
-			return fmt.Errorf("auto_external_ip_attachment: failed to create ExternalIP: %w", err)
+			// If the ExternalIP already exists (e.g. retry after partial failure), look it up and
+			// reuse it instead of failing. This makes the operation idempotent.
+			var alreadyExistsErr *dao.ErrAlreadyExists
+			if !errors.As(err, &alreadyExistsErr) {
+				return fmt.Errorf("auto_external_ip_attachment: failed to create ExternalIP: %w", err)
+			}
+			existing, lookupErr := s.externalIPDao.List().
+				SetFilter(fmt.Sprintf("this.metadata.name == %s", strconv.Quote(eipName))).
+				SetLimit(1).
+				Do(ctx)
+			if lookupErr != nil || existing.GetTotal() == 0 {
+				return fmt.Errorf("auto_external_ip_attachment: failed to create ExternalIP: %w", err)
+			}
+			eipID = existing.GetItems()[0].GetId()
+			s.logger.InfoContext(ctx, "reusing existing auto-provisioned ExternalIP",
+				slog.String("eip_name", eipName),
+				slog.String("eip_id", eipID),
+			)
+		} else {
+			eipID = eipResp.GetObject().GetId()
 		}
-		eipID := eipResp.GetObject().GetId()
+
 		if err = s.lifecycle.lockNewClusterAttachmentReferences(ctx, eipID, clusterID); err != nil {
 			return fmt.Errorf("auto_external_ip_attachment: failed to lock attachment references: %w", err)
 		}
 
 		attachment := privatev1.ExternalIPAttachment_builder{
 			Metadata: privatev1.Metadata_builder{
+				Name:   eipaName,
 				Tenant: tenant,
 				Labels: map[string]string{
 					autoCreatedLabel:    "true",

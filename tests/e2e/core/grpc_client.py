@@ -137,6 +137,9 @@ class GRPCClient:
     def get_subnet(self, *, subnet_id: str) -> dict[str, Any]:
         return self.call(service=f"{PUBLIC_API}.Subnets/Get", data={"id": subnet_id})
 
+    def get_private_subnet(self, *, subnet_id: str) -> dict[str, Any]:
+        return self.call(service=f"{PRIVATE_API}.Subnets/Get", data={"id": subnet_id})
+
     def list_subnet_ids(self) -> list[str]:
         response: dict[str, Any] = self.call(service=f"{PUBLIC_API}.Subnets/List")
         return [item["id"] for item in response.get("items", [])]

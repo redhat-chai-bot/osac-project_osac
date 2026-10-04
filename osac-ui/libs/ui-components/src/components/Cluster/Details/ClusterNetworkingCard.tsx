@@ -9,12 +9,58 @@ import {
   Flex,
   FlexItem,
   Label,
+  Spinner,
+  Tooltip,
 } from '@patternfly/react-core';
+import ExclamationCircleIcon from '@patternfly/react-icons/dist/esm/icons/exclamation-circle-icon';
 
-import { type Cluster, ClusterState } from '@osac/types';
+import {
+  type Cluster,
+  ClusterState,
+  ExternalIPAttachmentEndpoint,
+  ExternalIPAttachmentState,
+} from '@osac/types';
+import type { ExternalIPAttachment } from '@osac/types';
 
+import { useExternalIPAttachments } from '../../../api/v1/external-ip';
+import { clusterAttachmentFilter } from '../../../api/v1/external-ip-data';
 import { useTranslation } from '../../../hooks/useTranslation';
 import { displayValue } from '../../../utils/detailFormatters';
+import { getErrorMessage } from '../../../utils/error';
+
+export interface EndpointAttachmentStatus {
+  attachment: ExternalIPAttachment | undefined;
+  externalIpAddress: string | undefined;
+}
+
+export interface ClusterEndpointAttachments {
+  api: EndpointAttachmentStatus;
+  ingress: EndpointAttachmentStatus;
+}
+
+export const groupAttachmentsByEndpoint = (
+  attachments: readonly ExternalIPAttachment[],
+): ClusterEndpointAttachments => {
+  let api: EndpointAttachmentStatus = { attachment: undefined, externalIpAddress: undefined };
+  let ingress: EndpointAttachmentStatus = { attachment: undefined, externalIpAddress: undefined };
+
+  for (const attachment of attachments) {
+    if (attachment.status?.state !== ExternalIPAttachmentState.EXTERNAL_IP_ATTACHMENT_STATE_READY) {
+      continue;
+    }
+
+    const endpoint = attachment.spec?.targetEndpoint;
+    const ipAddress = attachment.status?.externalIpAddress;
+
+    if (endpoint === ExternalIPAttachmentEndpoint.EXTERNAL_IP_ATTACHMENT_ENDPOINT_API) {
+      api = { attachment, externalIpAddress: ipAddress };
+    } else if (endpoint === ExternalIPAttachmentEndpoint.EXTERNAL_IP_ATTACHMENT_ENDPOINT_INGRESS) {
+      ingress = { attachment, externalIpAddress: ipAddress };
+    }
+  }
+
+  return { api, ingress };
+};
 
 interface ClusterNetworkingCardProps {
   cluster: Cluster;
@@ -29,6 +75,90 @@ const formatSecurityGroups = (securityGroups?: Array<{ id: string; name?: string
 
 const isTerminalFailedState = (state: ClusterState | undefined): boolean =>
   state === ClusterState.FAILED || state === ClusterState.DELETE_FAILED;
+
+interface EndpointDescriptionProps {
+  type: ExternalIPAttachmentEndpoint;
+  attachments: readonly ExternalIPAttachment[];
+  isLoading: boolean;
+  error: unknown;
+  value: string | undefined;
+  autoProvisioned: boolean;
+  isProvisioning: boolean;
+  isFailed: boolean;
+}
+
+const EndpointDescription = ({
+  type,
+  attachments,
+  isLoading,
+  error,
+  value,
+  autoProvisioned,
+  isProvisioning,
+  isFailed,
+}: EndpointDescriptionProps) => {
+  const { t } = useTranslation();
+
+  const displayText = (() => {
+    if (value?.trim()) {
+      return value.trim();
+    }
+    if (isFailed) {
+      return '—';
+    }
+    if (isProvisioning) {
+      return t('Awaiting provisioning');
+    }
+    return '—';
+  })();
+
+  const grouped = groupAttachmentsByEndpoint(attachments);
+  const key =
+    type === ExternalIPAttachmentEndpoint.EXTERNAL_IP_ATTACHMENT_ENDPOINT_API
+      ? ('api' as const)
+      : ('ingress' as const);
+  const hasExternalIpContent = isLoading || !!error || !!grouped[key].externalIpAddress;
+
+  const renderExternalIpStatus = () => {
+    if (isLoading) {
+      return <Spinner size="sm" aria-label={t('Loading external IP')} />;
+    }
+    if (error) {
+      return (
+        <Tooltip content={getErrorMessage(error)}>
+          <Label color="red" isCompact icon={<ExclamationCircleIcon />}>
+            {t('External IP error')}
+          </Label>
+        </Tooltip>
+      );
+    }
+    if (!grouped[key].externalIpAddress) {
+      return null;
+    }
+    return (
+      <Label color="green" isCompact>
+        {grouped[key].externalIpAddress}
+      </Label>
+    );
+  };
+
+  if (autoProvisioned || hasExternalIpContent) {
+    return (
+      <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
+        <FlexItem>{displayText}</FlexItem>
+        {autoProvisioned && (
+          <FlexItem>
+            <Label color="blue" isCompact>
+              {t('Auto-provisioned')}
+            </Label>
+          </FlexItem>
+        )}
+        {hasExternalIpContent && <FlexItem>{renderExternalIpStatus()}</FlexItem>}
+      </Flex>
+    );
+  }
+  return <>{displayText}</>;
+};
 
 const ClusterNetworkingCard = ({ cluster }: ClusterNetworkingCardProps) => {
   const { t } = useTranslation();
@@ -45,35 +175,14 @@ const ClusterNetworkingCard = ({ cluster }: ClusterNetworkingCardProps) => {
   const isProvisioning = clusterState === ClusterState.PROGRESSING;
   const isFailed = isTerminalFailedState(clusterState);
 
-  const renderEndpointValue = (value: string | undefined) => {
-    if (value?.trim()) {
-      return value.trim();
-    }
-    if (isFailed) {
-      return '—';
-    }
-    if (isProvisioning) {
-      return t('Awaiting provisioning');
-    }
-    return '—';
-  };
-
-  const renderEndpointDescription = (value: string | undefined) => {
-    const displayText = renderEndpointValue(value);
-    if (autoProvisioned) {
-      return (
-        <Flex spaceItems={{ default: 'spaceItemsSm' }} alignItems={{ default: 'alignItemsCenter' }}>
-          <FlexItem>{displayText}</FlexItem>
-          <FlexItem>
-            <Label color="blue" isCompact>
-              {t('Auto-provisioned')}
-            </Label>
-          </FlexItem>
-        </Flex>
-      );
-    }
-    return displayText;
-  };
+  const {
+    data: externalIpAttachments = [],
+    isLoading: isLoadingAttachments,
+    error: attachmentsError,
+  } = useExternalIPAttachments(
+    { filter: clusterAttachmentFilter(cluster.id) },
+    { enabled: Boolean(cluster.id) },
+  );
 
   return (
     <Card isFullHeight>
@@ -101,13 +210,31 @@ const ClusterNetworkingCard = ({ cluster }: ClusterNetworkingCardProps) => {
           <DescriptionListGroup>
             <DescriptionListTerm>{t('API endpoint')}</DescriptionListTerm>
             <DescriptionListDescription>
-              {renderEndpointDescription(apiEndpoint)}
+              <EndpointDescription
+                type={ExternalIPAttachmentEndpoint.EXTERNAL_IP_ATTACHMENT_ENDPOINT_API}
+                attachments={externalIpAttachments}
+                isLoading={isLoadingAttachments}
+                error={attachmentsError}
+                value={apiEndpoint}
+                autoProvisioned={autoProvisioned}
+                isProvisioning={isProvisioning}
+                isFailed={isFailed}
+              />
             </DescriptionListDescription>
           </DescriptionListGroup>
           <DescriptionListGroup>
             <DescriptionListTerm>{t('Ingress endpoint')}</DescriptionListTerm>
             <DescriptionListDescription>
-              {renderEndpointDescription(ingressEndpoint)}
+              <EndpointDescription
+                type={ExternalIPAttachmentEndpoint.EXTERNAL_IP_ATTACHMENT_ENDPOINT_INGRESS}
+                attachments={externalIpAttachments}
+                isLoading={isLoadingAttachments}
+                error={attachmentsError}
+                value={ingressEndpoint}
+                autoProvisioned={autoProvisioned}
+                isProvisioning={isProvisioning}
+                isFailed={isFailed}
+              />
             </DescriptionListDescription>
           </DescriptionListGroup>
         </DescriptionList>

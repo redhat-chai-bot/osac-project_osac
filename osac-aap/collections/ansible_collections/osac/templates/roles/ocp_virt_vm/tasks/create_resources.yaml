@@ -29,10 +29,20 @@
 
 # Phase 2: Create resources using resolved StorageClasses.
 
-# Root disk DV is created without `apply` because CDI mutates registry-source DVs
-# (adds pullMethod, binding annotations) after creation. Using apply on day-2 would
-# try to remove those CDI-managed fields, triggering "Cannot update DataVolume Spec"
-# (OSAC-3403). Additional disks use source.blank which CDI does not mutate.
+# OSAC-3403: CDI's admission webhook rejects ANY spec modification on bound
+# DataVolumes. Even without `apply`, `state: present` still attempts a strategic
+# merge patch on an existing DV, which CDI rejects with "Cannot update
+# DataVolume Spec". To prevent day-2 failures (e.g. runStrategy changes), we
+# first check whether each DV already exists and skip creation if it does.
+- name: Check if root disk DataVolume already exists
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
+    api_version: cdi.kubevirt.io/v1beta1
+    kind: DataVolume
+    name: "{{ compute_instance_name }}-root-disk"
+    namespace: "{{ compute_instance_target_namespace }}"
+  register: root_dv_info
+
 - name: Create DataVolume for VM root disk
   kubernetes.core.k8s:
     kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
@@ -55,11 +65,24 @@
               storage: "{{ vm_boot_disk_size }}"
           storageClassName: "{{ boot_disk_storage_class }}"
     state: present
+  when: root_dv_info.resources | length == 0
+
+- name: Check if additional disk DataVolumes already exist
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
+    api_version: cdi.kubevirt.io/v1beta1
+    kind: DataVolume
+    name: "{{ compute_instance_name }}-disk-{{ idx + 1 }}"
+    namespace: "{{ compute_instance_target_namespace }}"
+  register: additional_dv_check
+  loop: "{{ vm_additional_disks }}"
+  loop_control:
+    index_var: idx
+  when: vm_additional_disks | length > 0
 
 - name: Create DataVolumes for additional disks
   kubernetes.core.k8s:
     kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
-    apply: true
     definition:
       apiVersion: cdi.kubevirt.io/v1beta1
       kind: DataVolume
@@ -81,7 +104,9 @@
   loop: "{{ vm_additional_disks }}"
   loop_control:
     index_var: idx
-  when: vm_additional_disks | length > 0
+  when:
+    - vm_additional_disks | length > 0
+    - additional_dv_check.results[idx].resources | length == 0
 
 - name: Add additional disks to template spec
   ansible.builtin.set_fact:

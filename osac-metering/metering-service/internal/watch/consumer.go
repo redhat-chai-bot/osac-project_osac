@@ -232,7 +232,7 @@ func (c *Consumer) publishAndUpsert(ctx context.Context, publish func() error, s
 	if err != nil {
 		return fmt.Errorf("rechecking projection for %s: %w", resourceID, err)
 	}
-	if projectionIsAhead(latest, state.FulfillmentVersion, state.CurrentState, state.BillingDimensions, allowSameVersionBoundary) {
+	if projectionIsAhead(latest, state.FulfillmentVersion, state.CurrentState, state.BillingDimensions, allowSameVersionBoundary, false) {
 		c.logger.Info("skipping stale Watch event before publication",
 			"resource_id", resourceID,
 			"event_version", state.FulfillmentVersion,
@@ -258,11 +258,25 @@ func (c *Consumer) publishAndUpsert(ctx context.Context, publish func() error, s
 // projectionIsAhead rejects an older snapshot and a conflicting snapshot with
 // the same fulfillment version. A missing projection is always accepted because
 // no ordering information exists until the resource is first observed.
-func projectionIsAhead(existing *projection.ResourceState, version int32, currentState string, dims map[string]any, allowSameVersionBoundary bool) bool {
+//
+// isDeleteEvent should be true when the incoming Watch event is an
+// OBJECT_DELETED. A tombstoned projection (Deleted==true) normally blocks
+// all further events. However, when the reconciler tombstones a projection
+// via reconcileMissedDeletions it only publishes correction events — the
+// lifecycle deleted.v1 event is still expected from the Watch consumer.
+// Allowing a delete event through at the same or later fulfillment version
+// ensures the lifecycle event is not permanently lost.
+func projectionIsAhead(existing *projection.ResourceState, version int32, currentState string, dims map[string]any, allowSameVersionBoundary bool, isDeleteEvent bool) bool {
 	if existing == nil {
 		return false
 	}
 	if existing.Deleted {
+		// Allow a Watch delete event through when the reconciler tombstoned
+		// the projection at the same or an earlier fulfillment version so
+		// the lifecycle deleted.v1 metering event can still be published.
+		if isDeleteEvent && existing.FulfillmentVersion <= version {
+			return false
+		}
 		return true
 	}
 	if existing.FulfillmentVersion > version {
@@ -452,7 +466,12 @@ func (c *Consumer) handleBareMetalDeletion(
 	transitionTime time.Time,
 ) error {
 	if existing != nil && existing.Deleted {
-		return nil
+		// Allow the Watch delete event through when the reconciler
+		// tombstoned the projection at the same or an earlier version so
+		// the lifecycle deleted.v1 metering event can still be published.
+		if existing.FulfillmentVersion > mapper.FulfillmentVersion() {
+			return nil
+		}
 	}
 	previousState := ""
 	if existing != nil {

@@ -3331,6 +3331,150 @@ var _ = Describe("Consumer", func() {
 			store.mu.Unlock()
 		})
 
+		It("publishes deleted.v1 when reconciler tombstoned the projection first", func() {
+			// Reproduces the race: reconcileMissedDeletions tombstones the
+			// projection before the Watch OBJECT_DELETED event arrives. The
+			// lifecycle deleted.v1 metering event must still be published.
+			store := newMockStore()
+			now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+			billableSince := now.Add(-time.Hour)
+			store.states["vm-reconciler-tombstoned"] = projection.ResourceState{
+				ResourceID:         "vm-reconciler-tombstoned",
+				ResourceType:       events.ResourceTypeComputeInstance,
+				TenantID:           "tenant-1",
+				CurrentState:       "RUNNING",
+				IsBillable:         false,
+				BillableSince:      &billableSince,
+				FulfillmentVersion: 5,
+				BillingDimensions:  map[string]any{},
+				TransitionTime:     now.Add(-time.Hour),
+				Deleted:            true, // tombstoned by reconciler
+			}
+
+			ci := makeComputeInstance("vm-reconciler-tombstoned", "tenant-1")
+			ci.Metadata.Version = 5 // same version as the tombstoned projection
+			ci.Metadata.DeletionTimestamp = timestamppb.New(now)
+			deleteEvent := &privatev1.Event{
+				Id:        "vm-reconciler-tombstoned",
+				Type:      privatev1.EventType_EVENT_TYPE_OBJECT_DELETED,
+				Timestamp: timestamppb.New(now),
+				Payload:   &privatev1.Event_ComputeInstance{ComputeInstance: ci},
+			}
+
+			stream := &mockWatchStream{
+				responses: []*privatev1.EventsWatchResponse{makeResponse(deleteEvent)},
+			}
+			client.results = []mockStreamResult{{stream: stream}}
+
+			pub := &mockPublisher{published: make([]cloudevents.Event, 0, 1), cancelFunc: cancel}
+			consumer := newConsumerWithStore(pub, store)
+
+			err := consumer.Run(ctx)
+			Expect(err).ToNot(HaveOccurred())
+
+			pub.mu.Lock()
+			defer pub.mu.Unlock()
+			Expect(pub.published).To(HaveLen(1))
+			Expect(pub.published[0].Type()).To(Equal(events.EventDeleted))
+		})
+
+		It("publishes deleted.v1 for BMaaS when reconciler tombstoned the projection first", func() {
+			// Same race condition but for the BMaaS path which has its own
+			// deletion handler with a separate Deleted guard.
+			store := newMockStore()
+			now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+			billableSince := now.Add(-time.Hour)
+			store.states["bmi-reconciler-tombstoned"] = projection.ResourceState{
+				ResourceID:         "bmi-reconciler-tombstoned",
+				ResourceType:       events.ResourceTypeBareMetalInstance,
+				TenantID:           "tenant-1",
+				CurrentState:       "BARE_METAL_INSTANCE_STATE_RUNNING",
+				IsBillable:         true,
+				BillableSince:      &billableSince,
+				FulfillmentVersion: 3,
+				BillingDimensions:  map[string]any{"bm_instance_type": "bmi-type-gpu-large", "catalog_item": "catalog-item-1"},
+				TransitionTime:     now.Add(-time.Hour),
+				Deleted:            true, // tombstoned by reconciler
+				BMaaSMeterState: projection.BMaaSMeterState{
+					Allocation:  projection.MeterState{},
+					Consumption: projection.MeterState{},
+				},
+			}
+
+			bmi := makeBareMetalInstance("bmi-reconciler-tombstoned", "tenant-1")
+			bmi.Metadata.Version = 3 // same version as the tombstoned projection
+			bmi.Metadata.DeletionTimestamp = timestamppb.New(now)
+			bmi.Status.StateTransitionTime = timestamppb.New(now)
+			deleteEvent := &privatev1.Event{
+				Id:        "bmi-reconciler-tombstoned",
+				Type:      privatev1.EventType_EVENT_TYPE_OBJECT_DELETED,
+				Timestamp: timestamppb.New(now),
+				Payload:   &privatev1.Event_BareMetalInstance{BareMetalInstance: bmi},
+			}
+
+			stream := &mockWatchStream{
+				responses: []*privatev1.EventsWatchResponse{makeResponse(deleteEvent)},
+			}
+			client.results = []mockStreamResult{{stream: stream}}
+
+			pub := &mockPublisher{published: make([]cloudevents.Event, 0, 1), cancelFunc: cancel}
+			consumer := newConsumerWithStore(pub, store)
+
+			err := consumer.Run(ctx)
+			Expect(err).ToNot(HaveOccurred())
+
+			pub.mu.Lock()
+			defer pub.mu.Unlock()
+			// BMaaS delete publishes a deleted.v1 audit event (the lifecycle event)
+			Expect(pub.published).To(HaveLen(1))
+			Expect(pub.published[0].Type()).To(Equal(events.EventDeleted))
+		})
+
+		It("blocks stale non-delete events for tombstoned resources", func() {
+			// Verify that the fix does NOT allow stale create/update events
+			// through for tombstoned resources — only delete events at the
+			// same or later version should be allowed.
+			store := newMockStore()
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			store.states["vm-tombstoned-guard"] = projection.ResourceState{
+				ResourceID:         "vm-tombstoned-guard",
+				ResourceType:       events.ResourceTypeComputeInstance,
+				TenantID:           "tenant-1",
+				CurrentState:       "RUNNING",
+				IsBillable:         false,
+				FulfillmentVersion: 5,
+				BillingDimensions:  map[string]any{},
+				TransitionTime:     now,
+				Deleted:            true,
+			}
+
+			ci := makeComputeInstance("vm-tombstoned-guard", "tenant-1")
+			ci.Metadata.Version = 6 // newer version, but it's an update, not a delete
+			updateEvent := &privatev1.Event{
+				Id:      "vm-tombstoned-guard-update",
+				Type:    privatev1.EventType_EVENT_TYPE_OBJECT_UPDATED,
+				Payload: &privatev1.Event_ComputeInstance{ComputeInstance: ci},
+			}
+
+			stream := &mockWatchStream{
+				responses: []*privatev1.EventsWatchResponse{makeResponse(updateEvent)},
+			}
+			client.results = []mockStreamResult{{stream: stream}}
+
+			pub := &mockPublisher{}
+			consumer := newConsumerWithStore(pub, store)
+
+			done := make(chan error, 1)
+			go func() { done <- consumer.Run(ctx) }()
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+			Eventually(done, time.Second).Should(Receive(BeNil()))
+
+			pub.mu.Lock()
+			defer pub.mu.Unlock()
+			Expect(pub.published).To(BeEmpty(), "non-delete events must still be blocked for tombstoned resources")
+		})
+
 		It("does not republish a duplicate BMaaS transition", func() {
 			store := newMockStore()
 			t0 := time.Date(2026, 9, 14, 11, 0, 0, 0, time.UTC)

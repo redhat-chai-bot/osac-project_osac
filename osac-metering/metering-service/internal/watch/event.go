@@ -140,12 +140,14 @@ func sameMeteringState(
 }
 
 func (c *Consumer) skipStaleEvent(prepared preparedEvent) bool {
+	isDelete := prepared.event.GetType() == privatev1.EventType_EVENT_TYPE_OBJECT_DELETED
 	if !projectionIsAhead(
 		prepared.existing,
 		prepared.version,
 		prepared.currentState,
 		prepared.dimensions,
 		prepared.allowSameVersionDeletion,
+		isDelete,
 	) {
 		return false
 	}
@@ -199,7 +201,7 @@ func (c *Consumer) commitMappedEvent(ctx context.Context, prepared preparedEvent
 		if err != nil {
 			return fmt.Errorf("rechecking projection for %s: %w", prepared.resourceID, err)
 		}
-		if projectionIsAhead(latest, prepared.version, prepared.currentState, prepared.dimensions, false) {
+		if projectionIsAhead(latest, prepared.version, prepared.currentState, prepared.dimensions, false, true) {
 			c.logger.Info("skipping stale delete event before publication",
 				"resource_id", prepared.resourceID,
 				"event_version", prepared.version,

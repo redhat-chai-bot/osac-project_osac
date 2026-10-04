@@ -47,9 +47,36 @@ func TestProjectionIsAheadTreatsTombstoneAsTerminal(t *testing.T) {
 		CurrentState:       "RUNNING",
 	}
 
+	// Non-delete events should always be blocked for tombstoned resources.
 	for _, version := range []int32{1, 4, 5, 100} {
-		if !projectionIsAhead(existing, version, "RUNNING", nil, false) {
-			t.Errorf("projectionIsAhead() = false for tombstone at incoming version %d", version)
+		if !projectionIsAhead(existing, version, "RUNNING", nil, false, false) {
+			t.Errorf("projectionIsAhead(isDeleteEvent=false) = false for tombstone at incoming version %d; want true", version)
+		}
+	}
+}
+
+func TestProjectionIsAheadAllowsDeleteThroughTombstone(t *testing.T) {
+	existing := &projection.ResourceState{
+		ResourceID:         "vm-tombstoned",
+		Deleted:            true,
+		FulfillmentVersion: 4,
+		CurrentState:       "RUNNING",
+	}
+
+	// A delete event at the same or later version must pass through so
+	// the lifecycle deleted.v1 metering event is published. This is the
+	// fix for the reconciler-vs-Watch race condition: reconcileMissedDeletions
+	// tombstones the projection before the Watch delete event arrives.
+	for _, version := range []int32{4, 5, 100} {
+		if projectionIsAhead(existing, version, "RUNNING", nil, false, true) {
+			t.Errorf("projectionIsAhead(isDeleteEvent=true) = true for tombstone at version %d; want false (should allow delete through)", version)
+		}
+	}
+
+	// A truly stale delete event (older fulfillment version) must still be blocked.
+	for _, version := range []int32{1, 2, 3} {
+		if !projectionIsAhead(existing, version, "RUNNING", nil, false, true) {
+			t.Errorf("projectionIsAhead(isDeleteEvent=true) = false for tombstone at stale version %d; want true", version)
 		}
 	}
 }

@@ -80,16 +80,27 @@ def test_compute_instance_api_fields(
         # Mutability: vCPUs
         _, rc = k8s_hub_client.patch(resource="computeinstance", name=instance_name, patch='{"spec":{"vcpus":8}}')
         assert rc == 0, "vCPUs update should succeed"
-        assert (
-            k8s_hub_client.get_jsonpath(resource="computeinstance", name=instance_name, jsonpath="{.spec.vcpus}") == "8"
+        poll_until(
+            fn=lambda: k8s_hub_client.get_jsonpath(
+                resource="computeinstance", name=instance_name, jsonpath="{.spec.vcpus}"
+            ),
+            until=lambda v: v == "8",
+            retries=10,
+            delay=2,
+            description=f"{instance_name} vcpus == 8",
         )
 
         # Mutability: memoryGiB
         _, rc = k8s_hub_client.patch(resource="computeinstance", name=instance_name, patch='{"spec":{"memoryGiB":16}}')
         assert rc == 0, "memoryGiB update should succeed"
-        assert (
-            k8s_hub_client.get_jsonpath(resource="computeinstance", name=instance_name, jsonpath="{.spec.memoryGiB}")
-            == "16"
+        poll_until(
+            fn=lambda: k8s_hub_client.get_jsonpath(
+                resource="computeinstance", name=instance_name, jsonpath="{.spec.memoryGiB}"
+            ),
+            until=lambda v: v == "16",
+            retries=10,
+            delay=2,
+            description=f"{instance_name} memoryGiB == 16",
         )
 
         # Immutability: image

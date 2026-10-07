@@ -5,16 +5,22 @@ package baremetalworker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/osac-project/osac/osac-operator/api/v1alpha1"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 )
+
+var errBMIAbsenceUnconfirmed = errors.New("BMI reservation absence is unconfirmed")
+
+const cleanupAbsenceGracePeriod = 5 * time.Minute
 
 // cleanupWorker retains the incarnation until both its old Agent and BMI are
 // authoritatively absent. A successful Delete is pending, never completion.
@@ -28,7 +34,18 @@ func (r *Reconciler) cleanupWorker(ctx context.Context, co *v1alpha1.ClusterOrde
 		return false, err
 	}
 	if w.BareMetalInstance.ID == "" {
-		return false, r.recoverCleanupBMI(ctx, co, tenant, w)
+		if err := r.recoverCleanupBMI(ctx, co, tenant, w); err != nil {
+			if errors.Is(err, errBMIAbsenceUnconfirmed) &&
+				w.LastFailureTime != nil &&
+				time.Since(w.LastFailureTime.Time) > cleanupAbsenceGracePeriod {
+				ctrllog.FromContext(ctx).Info("accepting BMI absence after grace period",
+					"worker", w.Name, "elapsed", time.Since(w.LastFailureTime.Time))
+				return true, nil
+			}
+			return false, err
+		}
+		// Persist recovered ID at a separate boundary before any external mutation.
+		return false, nil
 	}
 	state, err := r.readCleanupBMI(ctx, co, tenant, *w)
 	if err != nil {
@@ -70,7 +87,7 @@ func (r *Reconciler) recoverCleanupBMI(ctx context.Context, co *v1alpha1.Cluster
 		return r.rejectWorkerIdentity(co, err.Error())
 	}
 	if bmi == nil {
-		return fmt.Errorf("worker %s BMI reservation absence is unconfirmed", w.Name)
+		return fmt.Errorf("worker %s: %w", w.Name, errBMIAbsenceUnconfirmed)
 	}
 	candidate := *w
 	candidate.BareMetalInstance.ID = bmi.GetId()

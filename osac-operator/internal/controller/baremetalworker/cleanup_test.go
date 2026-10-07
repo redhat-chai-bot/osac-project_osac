@@ -159,6 +159,55 @@ func TestR03AgentUIDPrecondition(t *testing.T) {
 	}
 }
 
+func TestR03BMIAbsenceGracePeriod(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		elapsed  time.Duration
+		wantGone bool
+	}{
+		{"within grace period", 2 * time.Minute, false},
+		{"after grace period", 10 * time.Minute, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, base, co := workerReadHarness(t)
+			fc := &teardownReadClient{workerReadClient: base}
+			r.fulfillment = fc
+			w := co.Status.Workers[0]
+			w.Phase = workerPhaseDeleting
+			w.BareMetalInstance.ID = ""
+			stamp := metav1.NewTime(time.Now().Add(-tc.elapsed))
+			w.LastFailureTime = &stamp
+			// Empty list: no BMI found by name, triggers the unconfirmed path.
+			base.listed = nil
+			gone, err := r.cleanupWorker(context.Background(), co, &w)
+			if tc.wantGone {
+				if !gone || err != nil {
+					t.Fatalf("expected absence accepted after grace period: gone=%v err=%v", gone, err)
+				}
+			} else {
+				if gone || !errors.Is(err, errBMIAbsenceUnconfirmed) {
+					t.Fatalf("expected unconfirmed error within grace period: gone=%v err=%v", gone, err)
+				}
+			}
+		})
+	}
+}
+
+func TestR03BMIAbsenceGracePeriodNilLastFailureTime(t *testing.T) {
+	r, base, co := workerReadHarness(t)
+	fc := &teardownReadClient{workerReadClient: base}
+	r.fulfillment = fc
+	w := co.Status.Workers[0]
+	w.Phase = workerPhaseDeleting
+	w.BareMetalInstance.ID = ""
+	w.LastFailureTime = nil
+	base.listed = nil
+	gone, err := r.cleanupWorker(context.Background(), co, &w)
+	if gone || !errors.Is(err, errBMIAbsenceUnconfirmed) {
+		t.Fatalf("nil LastFailureTime must not accept absence: gone=%v err=%v", gone, err)
+	}
+}
+
 func TestR03BoundFailurePreservesRetryCategory(t *testing.T) {
 	r, _, co := workerReadHarness(t)
 	w := co.Status.Workers[0]

@@ -1,1 +1,103 @@
 ---
+# Override the upstream infra.aap_configuration.dispatch default ordering so
+# that execution environments are created BEFORE instance groups (container
+# groups).  The vendored default processes controller_instance_groups at
+# position 3 and controller_execution_environments at position 8.  When a
+# container group is registered before any execution environment exists, the
+# AWX task scheduler crashes with:
+#
+#   RuntimeError: Unable to find an execution environment.
+#
+# Moving controller_execution_environments ahead of controller_instance_groups
+# eliminates the race.
+#
+# Source: vendor/.../infra/aap_configuration/roles/dispatch/meta/argument_specs.yml
+# (controller_configuration_dispatcher_roles default, lines 99-187)
+controller_configuration_dispatcher_roles: # noqa: var-naming[no-role-prefix]
+  - role: controller_settings
+    var: controller_settings
+    tags: settings
+  - role: controller_instances
+    var: controller_instances
+    tags: instances
+  - role: controller_execution_environments
+    var: controller_execution_environments
+    tags: execution_environments
+  - role: controller_instance_groups
+    var: controller_instance_groups
+    tags: instance_groups
+  - role: controller_labels
+    var: controller_labels
+    tags: labels
+  - role: controller_credential_types
+    var: controller_credential_types
+    tags: credential_types
+  - role: controller_credentials
+    var: controller_credentials
+    tags: credentials
+  - role: controller_credential_input_sources
+    var: controller_credential_input_sources
+    tags: credential_input_sources
+  - role: controller_applications
+    var: aap_applications
+    tags: applications
+  - role: controller_notification_templates
+    var: controller_notifications
+    tags: notification_templates
+  - role: gateway_organizations
+    var: aap_organizations
+    tags: organizations
+    assign_galaxy_credentials_to_org: true
+    assign_default_ee_to_org: true
+    assign_notification_templates_to_org: true
+  - role: controller_projects
+    var: controller_projects
+    tags:
+      - inventories
+      - projects
+  - role: controller_inventories
+    var: controller_inventories
+    tags: inventories
+  - role: controller_inventory_sources
+    var: controller_inventory_sources
+    tags:
+      - inventories
+      - inventory_sources
+  - role: controller_inventory_source_update
+    var: controller_inventory_sources
+    tags:
+      - inventories
+      - inventory_sources
+  - role: controller_hosts
+    var: controller_hosts
+    tags:
+      - inventories
+      - hosts
+  - role: controller_bulk_host_create
+    var: controller_bulk_hosts
+    tags:
+      - inventories
+      - bulk_hosts
+  - role: controller_host_groups
+    var: controller_groups
+    tags:
+      - inventories
+      - host_groups
+  - role: controller_job_templates
+    var: controller_templates
+    tags: job_templates
+  - role: controller_workflow_job_templates
+    var: controller_workflows
+    tags: workflow_job_templates
+  - role: controller_schedules
+    var: controller_schedules
+    tags: schedules
+  - role: controller_roles
+    var: controller_roles
+    tags: roles
+  - role: controller_job_launch
+    var: controller_launch_jobs
+    tags: job_launch
+  - role: controller_workflow_launch
+    var: controller_workflow_launch_jobs
+    tags: workflow_launch

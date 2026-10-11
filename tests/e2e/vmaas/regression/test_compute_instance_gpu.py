@@ -108,14 +108,15 @@ def test_gpu_compute_instance(
             description=f"{ci_name} Starting",
         )
 
-        # Wait for VM namespace to be assigned
-        vm_ns: str = poll_until(
-            fn=lambda: k8s_hub_client.get_compute_instance_vm_namespace(name=ci_name),
-            until=lambda v: v != "",
-            retries=30,
-            delay=2,
-            description=f"{ci_name} VM namespace",
+        # Read target namespace from annotation set by operator before AAP runs.
+        # The standard status path (virtualMachineReference.namespace) is only
+        # populated after AAP completes, but AAP blocks waiting for VM readiness
+        # which never happens without GPU hardware.
+        ci_refreshed: dict[str, Any] = k8s_hub_client.get_json(resource="computeinstance", name=ci_name)
+        vm_ns = (
+            ci_refreshed.get("metadata", {}).get("annotations", {}).get("osac.openshift.io/subnet-target-namespace", "")
         )
+        assert vm_ns, f"Expected osac.openshift.io/subnet-target-namespace annotation on ComputeInstance {ci_name}"
 
         # Wait for AAP to create the VM with GPU hostDevices on the virt cluster
         host_devices: list[dict[str, Any]] = poll_until(

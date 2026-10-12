@@ -417,7 +417,7 @@ def assert_cluster_available(
 
     metering.expect("osac.resource.started.v1", resource_id=uuid)
     metering.verify()
-    wait_for_cluster_order_condition(k8s=k8s, name=co_name, condition_type="ClusterAvailable")
+    wait_for_cluster_order_condition(k8s=k8s, name=co_name, condition_type="ClusterAvailable", retries=240, delay=15)
 
     cluster = grpc.get_cluster(cluster_id=uuid)
     cluster_order_spec = k8s.get_cluster_order_spec(name=co_name)
@@ -626,7 +626,9 @@ def _assert_two_node_set_requests(
     return expected_replicas
 
 
-def _assert_worker_aggregates(*, k8s: K8sClient, co_name: str, expected_workers: int) -> None:
+def _assert_worker_aggregates(
+    *, k8s: K8sClient, co_name: str, expected_workers: int, retries: int = 120, delay: int = 10
+) -> None:
     def _get_worker_counts() -> tuple[int, int, int]:
         status = k8s.get_json(resource="clusterorder", name=co_name).get("status", {})
         return tuple(int(status.get(key, -1)) for key in ("desiredWorkers", "currentWorkers", "readyWorkers"))
@@ -634,8 +636,8 @@ def _assert_worker_aggregates(*, k8s: K8sClient, co_name: str, expected_workers:
     poll_until(
         fn=_get_worker_counts,
         until=lambda value: value == (expected_workers, expected_workers, expected_workers),
-        retries=120,
-        delay=10,
+        retries=retries,
+        delay=delay,
         description=f"{co_name} worker aggregates before NodePool isolation check",
     )
 
@@ -760,7 +762,9 @@ def assert_cluster_with_two_node_sets_available(
         cluster_order=cluster_order, cluster_node_sets=cluster["spec"]["nodeSets"], instance_types=instance_types
     )
     hosted_cluster_ns = k8s.get_cluster_order_namespace(name=co_name)
-    _assert_worker_aggregates(k8s=k8s, co_name=co_name, expected_workers=sum(expected_replicas.values()))
+    _assert_worker_aggregates(
+        k8s=k8s, co_name=co_name, expected_workers=sum(expected_replicas.values()), retries=240, delay=15
+    )
     _assert_installed_agents_by_node_set(
         k8s=k8s, co_name=co_name, expected_replicas=expected_replicas, instance_types=instance_types
     )

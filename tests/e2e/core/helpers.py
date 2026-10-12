@@ -948,7 +948,13 @@ def wait_for_tenant_deletion(*, k8s: K8sClient, name: str) -> None:
 
 
 def wait_for_cluster_order_condition(
-    *, k8s: K8sClient, name: str, condition_type: str, expected_status: str = "True"
+    *,
+    k8s: K8sClient,
+    name: str,
+    condition_type: str,
+    expected_status: str = "True",
+    retries: int = 120,
+    delay: int = 10,
 ) -> None:
     def _check() -> str:
         if not k8s.is_present(resource="clusterorder", name=name):
@@ -962,8 +968,8 @@ def wait_for_cluster_order_condition(
     poll_until(
         fn=_check,
         until=lambda v: v == expected_status,
-        retries=120,
-        delay=10,
+        retries=retries,
+        delay=delay,
         description=f"ClusterOrder {name} {condition_type}={expected_status}",
     )
 

@@ -683,7 +683,7 @@ var _ = Describe("VirtualNetworkReconciler", func() {
 			Expect(vnet.Finalizers).NotTo(ContainElement(osacVirtualNetworkFinalizer))
 		})
 
-		It("should wait for child Subnet before deprovisioning", func() {
+		It("should cascade-delete child Subnet and requeue until removed", func() {
 			const gateVnetSubnetUUID = "gate-vnet-subnet-uuid"
 			gateVnet := &osacv1alpha1.VirtualNetwork{
 				ObjectMeta: metav1.ObjectMeta{
@@ -700,8 +700,12 @@ var _ = Describe("VirtualNetworkReconciler", func() {
 			Expect(k8sClient.Create(ctx, gateVnet)).To(Succeed())
 
 			childSubnet := &osacv1alpha1.Subnet{
-				ObjectMeta: metav1.ObjectMeta{Name: "gate-child-subnet", Namespace: "default"},
-				Spec:       osacv1alpha1.SubnetSpec{VirtualNetwork: gateVnetSubnetUUID, IPv4CIDR: "10.1.1.0/24"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "gate-child-subnet",
+					Namespace:  "default",
+					Finalizers: []string{"test/block-deletion"},
+				},
+				Spec: osacv1alpha1.SubnetSpec{VirtualNetwork: gateVnetSubnetUUID, IPv4CIDR: "10.1.1.0/24"},
 			}
 			Expect(k8sClient.Create(ctx, childSubnet)).To(Succeed())
 
@@ -709,13 +713,20 @@ var _ = Describe("VirtualNetworkReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(defaultPreconditionRequeueInterval))
 
-			Expect(k8sClient.Delete(ctx, childSubnet)).To(Succeed())
+			// Verify the child Subnet was deletion-marked
+			updated := &osacv1alpha1.Subnet{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(childSubnet), updated)).To(Succeed())
+			Expect(updated.DeletionTimestamp.IsZero()).To(BeFalse(), "child Subnet should be deletion-marked")
+
+			// Clean up: remove finalizer so the child can be garbage collected
+			updated.Finalizers = nil
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed())
 			gateVnet.Finalizers = nil
 			_ = k8sClient.Update(ctx, gateVnet)
 			_ = k8sClient.Delete(ctx, gateVnet)
 		})
 
-		It("should wait for child SecurityGroup before deprovisioning", func() {
+		It("should cascade-delete child SecurityGroup and requeue until removed", func() {
 			const gateVnetSGUUID = "gate-vnet-sg-uuid"
 			gateVnet := &osacv1alpha1.VirtualNetwork{
 				ObjectMeta: metav1.ObjectMeta{
@@ -732,8 +743,12 @@ var _ = Describe("VirtualNetworkReconciler", func() {
 			Expect(k8sClient.Create(ctx, gateVnet)).To(Succeed())
 
 			childSG := &osacv1alpha1.SecurityGroup{
-				ObjectMeta: metav1.ObjectMeta{Name: "gate-child-sg", Namespace: "default"},
-				Spec:       osacv1alpha1.SecurityGroupSpec{VirtualNetwork: gateVnetSGUUID},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "gate-child-sg",
+					Namespace:  "default",
+					Finalizers: []string{"test/block-deletion"},
+				},
+				Spec: osacv1alpha1.SecurityGroupSpec{VirtualNetwork: gateVnetSGUUID},
 			}
 			Expect(k8sClient.Create(ctx, childSG)).To(Succeed())
 
@@ -741,13 +756,20 @@ var _ = Describe("VirtualNetworkReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(defaultPreconditionRequeueInterval))
 
-			Expect(k8sClient.Delete(ctx, childSG)).To(Succeed())
+			// Verify the child SecurityGroup was deletion-marked
+			updated := &osacv1alpha1.SecurityGroup{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(childSG), updated)).To(Succeed())
+			Expect(updated.DeletionTimestamp.IsZero()).To(BeFalse(), "child SecurityGroup should be deletion-marked")
+
+			// Clean up: remove finalizer so the child can be garbage collected
+			updated.Finalizers = nil
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed())
 			gateVnet.Finalizers = nil
 			_ = k8sClient.Update(ctx, gateVnet)
 			_ = k8sClient.Delete(ctx, gateVnet)
 		})
 
-		It("should wait for child NATGateway before deprovisioning", func() {
+		It("should cascade-delete child NATGateway and requeue until removed", func() {
 			const gateVnetNATGWUUID = "gate-vnet-natgw-uuid"
 			gateVnet := &osacv1alpha1.VirtualNetwork{
 				ObjectMeta: metav1.ObjectMeta{
@@ -764,8 +786,12 @@ var _ = Describe("VirtualNetworkReconciler", func() {
 			Expect(k8sClient.Create(ctx, gateVnet)).To(Succeed())
 
 			childNATGW := &osacv1alpha1.NATGateway{
-				ObjectMeta: metav1.ObjectMeta{Name: "gate-child-natgw", Namespace: "default"},
-				Spec:       osacv1alpha1.NATGatewaySpec{VirtualNetwork: gateVnetNATGWUUID, ExternalIP: "some-eip"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "gate-child-natgw",
+					Namespace:  "default",
+					Finalizers: []string{"test/block-deletion"},
+				},
+				Spec: osacv1alpha1.NATGatewaySpec{VirtualNetwork: gateVnetNATGWUUID, ExternalIP: "some-eip"},
 			}
 			Expect(k8sClient.Create(ctx, childNATGW)).To(Succeed())
 
@@ -773,7 +799,63 @@ var _ = Describe("VirtualNetworkReconciler", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(defaultPreconditionRequeueInterval))
 
+			// Verify the child NATGateway was deletion-marked
+			updated := &osacv1alpha1.NATGateway{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(childNATGW), updated)).To(Succeed())
+			Expect(updated.DeletionTimestamp.IsZero()).To(BeFalse(), "child NATGateway should be deletion-marked")
+
+			// Clean up: remove finalizer so the child can be garbage collected
+			updated.Finalizers = nil
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed())
+			gateVnet.Finalizers = nil
+			_ = k8sClient.Update(ctx, gateVnet)
+			_ = k8sClient.Delete(ctx, gateVnet)
+		})
+
+		It("should only await already-deleting child NATGateway without re-deleting", func() {
+			const gateVnetAlreadyDeletingUUID = "gate-vnet-already-deleting-uuid"
+			gateVnet := &osacv1alpha1.VirtualNetwork{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "gate-vnet-already-deleting",
+					Namespace:  "default",
+					Finalizers: []string{osacVirtualNetworkFinalizer},
+					Labels:     map[string]string{osacVirtualNetworkIDLabel: gateVnetAlreadyDeletingUUID},
+				},
+				Spec: osacv1alpha1.VirtualNetworkSpec{
+					Region: "us-west-1", IPv4CIDR: "10.4.0.0/16",
+					NetworkClass: "cudn-net",
+				},
+			}
+			Expect(k8sClient.Create(ctx, gateVnet)).To(Succeed())
+
+			// Create a child NATGateway with a finalizer so Delete sets
+			// DeletionTimestamp without removing it from the API server.
+			childNATGW := &osacv1alpha1.NATGateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "gate-child-natgw-deleting",
+					Namespace:  "default",
+					Finalizers: []string{"test/block-deletion"},
+				},
+				Spec: osacv1alpha1.NATGatewaySpec{VirtualNetwork: gateVnetAlreadyDeletingUUID, ExternalIP: "some-eip"},
+			}
+			Expect(k8sClient.Create(ctx, childNATGW)).To(Succeed())
+			// Pre-delete the child so it already has a DeletionTimestamp
 			Expect(k8sClient.Delete(ctx, childNATGW)).To(Succeed())
+
+			// Verify the child is deletion-marked but still exists (due to finalizer)
+			updated := &osacv1alpha1.NATGateway{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(childNATGW), updated)).To(Succeed())
+			Expect(updated.DeletionTimestamp.IsZero()).To(BeFalse())
+
+			// handleDelete should requeue waiting for the child to be fully removed
+			result, err := reconciler.handleDelete(ctx, gateVnet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(defaultPreconditionRequeueInterval))
+
+			// Clean up: remove finalizer so the child can be garbage collected
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(childNATGW), updated)).To(Succeed())
+			updated.Finalizers = nil
+			Expect(k8sClient.Update(ctx, updated)).To(Succeed())
 			gateVnet.Finalizers = nil
 			_ = k8sClient.Update(ctx, gateVnet)
 			_ = k8sClient.Delete(ctx, gateVnet)

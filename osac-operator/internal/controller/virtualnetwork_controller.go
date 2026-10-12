@@ -102,9 +102,9 @@ func NewVirtualNetworkReconciler(
 // +kubebuilder:rbac:groups=osac.openshift.io,resources=virtualnetworks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=osac.openshift.io,resources=virtualnetworks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=osac.openshift.io,resources=virtualnetworks/finalizers,verbs=update
-// +kubebuilder:rbac:groups=osac.openshift.io,resources=subnets,verbs=list
-// +kubebuilder:rbac:groups=osac.openshift.io,resources=securitygroups,verbs=list
-// +kubebuilder:rbac:groups=osac.openshift.io,resources=natgateways,verbs=list
+// +kubebuilder:rbac:groups=osac.openshift.io,resources=subnets,verbs=list;delete
+// +kubebuilder:rbac:groups=osac.openshift.io,resources=securitygroups,verbs=list;delete
+// +kubebuilder:rbac:groups=osac.openshift.io,resources=natgateways,verbs=list;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -268,10 +268,14 @@ func (r *VirtualNetworkReconciler) handleDelete(ctx context.Context, vnet *v1alp
 		return ctrl.Result{}, nil
 	}
 
-	// Gate: wait for all child resources referencing this VNet to be fully removed
-	// before triggering the AAP deprovision job. Without this gate, the infrastructure
-	// backend rejects the VNet deletion because children still exist, causing unnecessary
-	// failed jobs and backoff delays.
+	// Cascade-delete child resources referencing this VNet, then wait for them
+	// to be fully removed before triggering the AAP deprovision job. Without
+	// this gate the infrastructure backend rejects the VNet deletion because
+	// children still exist, causing unnecessary failed jobs and backoff delays.
+	// Each child has its own finalizer and deprovision lifecycle, so issuing a
+	// Kubernetes Delete here only sets the DeletionTimestamp — the child
+	// controller handles its own teardown.
+	//
 	// Child resources reference the parent VN by its fulfillment-service UUID
 	// (stored in the osac.openshift.io/virtualnetwork-uuid label), not by K8s name.
 	vnetUUID := vnet.Labels[osacVirtualNetworkIDLabel]
@@ -283,7 +287,14 @@ func (r *VirtualNetworkReconciler) handleDelete(ctx context.Context, vnet *v1alp
 	}
 	for i := range subnetList.Items {
 		if subnetList.Items[i].Spec.VirtualNetwork == vnetUUID {
-			log.Info("waiting for child Subnet to be deleted before deprovisioning VirtualNetwork",
+			if subnetList.Items[i].DeletionTimestamp.IsZero() {
+				log.Info("deleting child Subnet before deprovisioning VirtualNetwork",
+					"subnet", subnetList.Items[i].Name)
+				if err := r.Delete(ctx, &subnetList.Items[i]); err != nil {
+					return ctrl.Result{}, fmt.Errorf("deleting child Subnet %s: %w", subnetList.Items[i].Name, err)
+				}
+			}
+			log.Info("waiting for child Subnet to be fully removed",
 				"subnet", subnetList.Items[i].Name)
 			return ctrl.Result{RequeueAfter: defaultPreconditionRequeueInterval}, nil
 		}
@@ -295,7 +306,14 @@ func (r *VirtualNetworkReconciler) handleDelete(ctx context.Context, vnet *v1alp
 	}
 	for i := range sgList.Items {
 		if sgList.Items[i].Spec.VirtualNetwork == vnetUUID {
-			log.Info("waiting for child SecurityGroup to be deleted before deprovisioning VirtualNetwork",
+			if sgList.Items[i].DeletionTimestamp.IsZero() {
+				log.Info("deleting child SecurityGroup before deprovisioning VirtualNetwork",
+					"securityGroup", sgList.Items[i].Name)
+				if err := r.Delete(ctx, &sgList.Items[i]); err != nil {
+					return ctrl.Result{}, fmt.Errorf("deleting child SecurityGroup %s: %w", sgList.Items[i].Name, err)
+				}
+			}
+			log.Info("waiting for child SecurityGroup to be fully removed",
 				"securityGroup", sgList.Items[i].Name)
 			return ctrl.Result{RequeueAfter: defaultPreconditionRequeueInterval}, nil
 		}
@@ -307,7 +325,14 @@ func (r *VirtualNetworkReconciler) handleDelete(ctx context.Context, vnet *v1alp
 	}
 	for i := range natgwList.Items {
 		if natgwList.Items[i].Spec.VirtualNetwork == vnetUUID {
-			log.Info("waiting for child NATGateway to be deleted before deprovisioning VirtualNetwork",
+			if natgwList.Items[i].DeletionTimestamp.IsZero() {
+				log.Info("deleting child NATGateway before deprovisioning VirtualNetwork",
+					"natGateway", natgwList.Items[i].Name)
+				if err := r.Delete(ctx, &natgwList.Items[i]); err != nil {
+					return ctrl.Result{}, fmt.Errorf("deleting child NATGateway %s: %w", natgwList.Items[i].Name, err)
+				}
+			}
+			log.Info("waiting for child NATGateway to be fully removed",
 				"natGateway", natgwList.Items[i].Name)
 			return ctrl.Result{RequeueAfter: defaultPreconditionRequeueInterval}, nil
 		}

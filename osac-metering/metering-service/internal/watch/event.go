@@ -42,6 +42,20 @@ func (c *Consumer) prepareEvent(ctx context.Context, event *privatev1.Event) (pr
 		return preparedEvent{}, false, fmt.Errorf("reading projection for %s: %w", resourceID, err)
 	}
 
+	// When the reconciler's MissedDeletion correction has already marked the
+	// projection as Deleted, treat it as absent for OBJECT_DELETED Watch
+	// events.  Without this, skipStaleEvent and commitMappedEvent see a
+	// Deleted projection, consider the Watch event stale, and suppress the
+	// deleted.v1 CloudEvent -- leaving consumers (including the E2E metering
+	// test adapter) without a lifecycle deletion signal.
+	if event.GetType() == privatev1.EventType_EVENT_TYPE_OBJECT_DELETED &&
+		existing != nil && existing.Deleted {
+		c.logger.Info("reconciler preempted Watch deletion, treating projection as absent",
+			"resource_id", resourceID,
+			"event_id", event.GetId())
+		existing = nil
+	}
+
 	previousState := ""
 	if existing != nil {
 		previousState = existing.CurrentState
@@ -199,7 +213,13 @@ func (c *Consumer) commitMappedEvent(ctx context.Context, prepared preparedEvent
 		if err != nil {
 			return fmt.Errorf("rechecking projection for %s: %w", prepared.resourceID, err)
 		}
-		if projectionIsAhead(latest, prepared.version, prepared.currentState, prepared.dimensions, false) {
+		// Allow the deleted.v1 event through when the projection was already
+		// cleaned up by the reconciler (Deleted flag set or row removed).
+		// The reconciler emits a correction.v1 but NOT a deleted.v1, so
+		// suppressing the Watch event here would leave consumers without the
+		// lifecycle deletion signal.
+		reconciledAway := latest == nil || latest.Deleted
+		if !reconciledAway && projectionIsAhead(latest, prepared.version, prepared.currentState, prepared.dimensions, false) {
 			c.logger.Info("skipping stale delete event before publication",
 				"resource_id", prepared.resourceID,
 				"event_version", prepared.version,

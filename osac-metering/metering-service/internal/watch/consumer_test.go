@@ -1218,6 +1218,53 @@ var _ = Describe("Consumer", func() {
 			Expect(store.states["vm-del"].Deleted).To(BeTrue())
 		})
 
+		It("publishes deleted.v1 when the reconciler already marked the projection Deleted", func() {
+			// Regression: when a short-lived resource is created and deleted
+			// quickly, the periodic reconciler may run MissedDeletion (emitting
+			// correction.v1 and setting Deleted=true) before the Watch consumer
+			// processes the real OBJECT_DELETED event.  The consumer must still
+			// publish deleted.v1 so lifecycle consumers see a complete signal.
+			store := newMockStore()
+			now := time.Now().UTC().Truncate(time.Microsecond)
+			store.states["vm-reconciled"] = projection.ResourceState{
+				ResourceID:         "vm-reconciled",
+				ResourceType:       events.ResourceTypeComputeInstance,
+				TenantID:           "tenant-1",
+				CurrentState:       "RUNNING",
+				IsBillable:         false,
+				FulfillmentVersion: 1,
+				BillingDimensions:  map[string]any{},
+				TransitionTime:     now,
+				Deleted:            true, // reconciler already cleaned up
+			}
+
+			ci := makeComputeInstance("vm-reconciled", "tenant-1")
+			ci.Metadata.Version = 2
+			ci.Metadata.DeletionTimestamp = timestamppb.Now()
+			event := &privatev1.Event{
+				Id:        "evt-reconciled-del",
+				Type:      privatev1.EventType_EVENT_TYPE_OBJECT_DELETED,
+				Timestamp: timestamppb.Now(),
+				Payload:   &privatev1.Event_ComputeInstance{ComputeInstance: ci},
+			}
+
+			stream := &mockWatchStream{
+				responses: []*privatev1.EventsWatchResponse{makeResponse(event)},
+			}
+			client.results = []mockStreamResult{{stream: stream}}
+
+			pub := &mockPublisher{published: make([]cloudevents.Event, 0, 1), cancelFunc: cancel}
+			consumer := newConsumerWithStore(pub, store)
+
+			err := consumer.Run(ctx)
+			Expect(err).ToNot(HaveOccurred())
+
+			pub.mu.Lock()
+			defer pub.mu.Unlock()
+			Expect(pub.published).To(HaveLen(1), "deleted.v1 must be published even when projection is already Deleted")
+			Expect(pub.published[0].Type()).To(Equal(events.EventDeleted))
+		})
+
 		It("does not publish a stale Watch snapshot after a newer snapshot advanced the projection", func() {
 			store := newMockStore()
 			now := time.Now().UTC().Truncate(time.Microsecond)

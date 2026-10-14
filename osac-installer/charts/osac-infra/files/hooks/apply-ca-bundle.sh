@@ -92,14 +92,20 @@ if [[ "${WAIT_DEFAULT_CA}" == "true" ]]; then
   wait_for_certificate default-ca-cert "${CERT_MANAGER_NAMESPACE}" 36
 fi
 
-# When publicIngress is enabled, the OpenShift ingress router presents the
-# cluster's default ingress certificate. In CI this certificate is self-signed
-# and not in the system CA bundle, so components connecting to Keycloak via
-# the external route get "x509: certificate signed by unknown authority".
+# The OpenShift ingress router presents the cluster's default ingress
+# certificate. In CI this certificate is self-signed and not in the system
+# CA bundle, so components connecting to Keycloak via the external route
+# get "x509: certificate signed by unknown authority".
 # Extract the ingress CA from the router-ca secret and add it as a Bundle
 # source so trust-manager includes it alongside the system CAs.
+#
+# INCLUDE_INGRESS_CA covers the operator's OAuth path: even without
+# publicIngress the operator reaches Keycloak over the external route to
+# acquire client-credentials tokens (OSAC-5939). USE_DEFAULT_CAS is the
+# legacy trigger and still works.
+INCLUDE_INGRESS_CA="${INCLUDE_INGRESS_CA:-false}"
 INGRESS_CA_SOURCE=""
-if [[ "${USE_DEFAULT_CAS}" == "true" ]]; then
+if [[ "${USE_DEFAULT_CAS}" == "true" || "${INCLUDE_INGRESS_CA}" == "true" ]]; then
   echo "Extracting OpenShift ingress CA from openshift-ingress-operator/router-ca..."
   if ! INGRESS_CA_DATA=$(oc_run get secret router-ca \
     -n openshift-ingress-operator \

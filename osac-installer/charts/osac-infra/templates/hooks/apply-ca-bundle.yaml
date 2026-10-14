@@ -73,7 +73,7 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["create"]
-{{- if and .Values.keycloak.enabled .Values.keycloak.route.publicIngress }}
+{{- if .Values.keycloak.enabled }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -183,6 +183,8 @@ spec:
               value: {{ .Values.csiNamespace | quote }}
             - name: USE_DEFAULT_CAS
               value: {{ .Values.keycloak.route.publicIngress | quote }}
+            - name: INCLUDE_INGRESS_CA
+              value: {{ .Values.keycloak.enabled | quote }}
           volumeMounts:
             - name: tmp
               mountPath: /tmp
@@ -313,7 +315,7 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "delete"]
     resourceNames: ["ingress-ca"]
-{{- if and .Values.keycloak.enabled .Values.keycloak.route.publicIngress }}
+{{- if .Values.keycloak.enabled }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

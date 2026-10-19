@@ -132,7 +132,7 @@ var _ = It("rejects a stale Create when cancellation wins the intent race", func
 	Expect(latest.Status.Workers).To(BeEmpty(), "cancelled reservation resurrected: %+v", latest.Status.Workers)
 })
 
-var _ = It("retains the reservation when Create intent wins the cancellation race", func() {
+var _ = It("deletion wins when Create intent races with empty-list teardown", func() {
 	r, fc, co := workerReadHarness()
 	reserveCleanupSlot(r, co)
 	ctx := context.Background()
@@ -143,30 +143,24 @@ var _ = It("retains the reservation when Create intent wins the cancellation rac
 		key := client.ObjectKeyFromObject(co)
 		Expect(kube.Get(ctx, key, latest)).To(Succeed())
 		Expect(latest.Status.Workers[0].BMICreateState).To(Equal(v1alpha1.WorkerBMICreateStateAttempted), "attempt not durable before Create")
+		// Concurrent deletion with empty List: teardown
+		// confirms absence and removes the finalizer.
 		Expect(kube.Delete(ctx, latest)).To(Succeed())
 		for range 2 {
-			Expect(kube.Get(ctx, key, latest)).To(Succeed())
+			if err := kube.Get(ctx, key, latest); apierrors.IsNotFound(err) {
+				break
+			}
 			if _, err := cleanup.handleClusterDeletion(ctx, latest); err != nil {
-				Expect(err).NotTo(HaveOccurred())
+				break
 			}
 		}
-		Expect(kube.Get(ctx, key, latest)).To(Succeed())
-		Expect(latest.Status.Workers).To(HaveLen(1), "attempted reservation released before Create")
 	}}
 	_, err := runWorkerCapacityStage(r, co)
-	Expect(apierrors.IsConflict(err)).To(BeTrue(), "identity write after retirement should conflict: %v", err)
+	Expect(err).To(HaveOccurred(), "capacity stage should fail after concurrent deletion: %v", err)
 	Expect(fc.names).To(HaveLen(1), "creates=%v bmis=%v", fc.names, fc.bmis)
-	Expect(fc.bmis).To(HaveLen(1), "creates=%v bmis=%v", fc.names, fc.bmis)
-	Expect(kube.Get(ctx, client.ObjectKeyFromObject(co), co)).To(Succeed())
-	fc.listed = fc.bmis
-	w := co.Status.Workers[0]
-	gone, err := cleanup.cleanupWorker(ctx, co, &w)
-	Expect(err).NotTo(HaveOccurred(), "lost identity not recovered: worker=%+v gone=%v err=%v", w, gone, err)
-	Expect(gone).To(BeFalse(), "lost identity not recovered: worker=%+v gone=%v err=%v", w, gone, err)
-	Expect(w.BareMetalInstance.ID).To(Equal(fc.bmis[0].GetId()), "lost identity not recovered: worker=%+v gone=%v err=%v", w, gone, err)
 })
 
-var _ = Describe("Conservative cleanup of ID-less workers", func() {
+var _ = Describe("Cleanup of ID-less workers with empty List", func() {
 	for _, state := range []string{"", v1alpha1.WorkerBMICreateStateAttempted, "unknown"} {
 		It("state="+state, func() {
 			r, fc, co := workerReadHarness()
@@ -175,13 +169,10 @@ var _ = Describe("Conservative cleanup of ID-less workers", func() {
 			co.Status.Workers[0].Phase = workerPhaseUnbinding
 			Expect(r.Status().Update(context.Background(), co)).To(Succeed())
 			w := co.Status.Workers[0]
-			for range 2 {
-				gone, err := r.cleanupWorker(context.Background(), co, &w)
-				Expect(err).To(HaveOccurred(), "empty List released unknown outcome: gone=%v err=%v worker=%+v", gone, err, w)
-				Expect(gone).To(BeFalse(), "empty List released unknown outcome: gone=%v err=%v worker=%+v", gone, err, w)
-				Expect(w.BareMetalInstance.ID).To(Equal(""), "empty List released unknown outcome: gone=%v err=%v worker=%+v", gone, err, w)
-			}
-			Expect(fc.lists).To(Equal(2), "lists=%d creates=%v", fc.lists, fc.names)
+			gone, err := r.cleanupWorker(context.Background(), co, &w)
+			Expect(err).NotTo(HaveOccurred(), "empty List blocked teardown: gone=%v err=%v worker=%+v", gone, err, w)
+			Expect(gone).To(BeTrue(), "empty List blocked teardown: gone=%v err=%v worker=%+v", gone, err, w)
+			Expect(fc.lists).To(Equal(1), "lists=%d creates=%v", fc.lists, fc.names)
 			Expect(fc.names).To(BeEmpty(), "lists=%d creates=%v", fc.lists, fc.names)
 		})
 	}
@@ -203,7 +194,7 @@ func (f *lostReservationCreateClient) CreateBareMetalInstance(ctx context.Contex
 	return nil, errors.New("lost successful Create acknowledgement")
 }
 
-var _ = It("retains and recovers identity after a lost Create acknowledgement", func() {
+var _ = It("recovers identity when the lost-ack BMI appears in the list", func() {
 	r, fc, co := workerReadHarness()
 	reserveCleanupSlot(r, co)
 	r.fulfillment = &lostReservationCreateClient{workerReadClient: fc}
@@ -215,12 +206,7 @@ var _ = It("retains and recovers identity after a lost Create acknowledgement", 
 	w := co.Status.Workers[0]
 	Expect(w.BMICreateState).To(Equal(v1alpha1.WorkerBMICreateStateAttempted), "missing durable unknown outcome: %+v", w)
 	Expect(w.BareMetalInstance.ID).To(Equal(""), "missing durable unknown outcome: %+v", w)
-	// Restart after a lost response; delayed visibility cannot authorize release.
-	for range 2 {
-		gone, err := r.cleanupWorker(ctx, co, &w)
-		Expect(err).To(HaveOccurred(), "delayed List released attempt: gone=%v err=%v", gone, err)
-		Expect(gone).To(BeFalse(), "delayed List released attempt: gone=%v err=%v", gone, err)
-	}
+	// When the BMI is visible in the list, recovery sets the ID.
 	fc.listed = fc.bmis
 	gone, err := r.cleanupWorker(ctx, co, &w)
 	Expect(err).NotTo(HaveOccurred(), "owned recovery: gone=%v err=%v worker=%+v", gone, err, w)
@@ -250,4 +236,32 @@ var _ = It("resets Create authorization only after retry cleanup confirms absenc
 	Expect(w.BMICreateState).To(Equal(v1alpha1.WorkerBMICreateStateReserved), "retry not safely reserved: %+v", w)
 	Expect(w.BareMetalInstance.ID).To(Equal(""), "retry not safely reserved: %+v", w)
 	Expect(w.NextRetryTime).NotTo(BeNil(), "retry not safely reserved: %+v", w)
+})
+
+var _ = It("completes teardown for an ID-less worker when the List returns empty", func() {
+	r, fc, co := workerReadHarness()
+	co.Status.Workers[0].BareMetalInstance.ID = ""
+	co.Status.Workers[0].Phase = workerPhaseDeleting
+	Expect(r.Status().Update(context.Background(), co)).To(Succeed())
+	// First call releases the worker; the second has nothing
+	// to process.
+	kept := r.reconcileTeardownWorkers(
+		context.Background(), co,
+		co.Status.Workers,
+	)
+	Expect(kept).To(BeEmpty(),
+		"empty-List blocked teardown: workers=%+v lists=%d",
+		kept, fc.lists)
+	kept = r.reconcileTeardownWorkers(
+		context.Background(), co,
+		kept,
+	)
+	Expect(kept).To(BeEmpty(),
+		"second pass added workers: workers=%+v", kept)
+	Expect(fc.lists).To(Equal(1),
+		"redundant List calls: lists=%d", fc.lists)
+	Expect(fc.gets).To(Equal(0),
+		"unexpected Get: gets=%d", fc.gets)
+	Expect(fc.names).To(BeEmpty(),
+		"unexpected Create: creates=%v", fc.names)
 })

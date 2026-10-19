@@ -39,7 +39,27 @@ func (r *Reconciler) cleanupWorker(ctx context.Context, co *v1alpha1.ClusterOrde
 			}
 			return true, nil
 		}
-		return false, r.recoverCleanupBMI(ctx, co, tenant, w)
+		if err := r.recoverCleanupBMI(ctx, co, tenant, w); err != nil {
+			return false, err
+		}
+		if w.BareMetalInstance.ID != "" {
+			// Recovery found the BMI; proceed to ID-based
+			// cleanup on next reconcile.
+			return false, nil
+		}
+		// List matched no owned BMI for this worker name —
+		// clean up any orphaned Agent before confirming
+		// absence.
+		agent, err := r.cleanupAgent(ctx, co, *w, nil)
+		if err != nil {
+			return false, err
+		}
+		if agent != nil {
+			return false, r.requestCleanupAgent(
+				ctx, co, w, agent,
+			)
+		}
+		return true, nil
 	}
 	state, err := r.readCleanupBMI(ctx, co, tenant, *w)
 	if err != nil {
@@ -64,9 +84,12 @@ func (r *Reconciler) cleanupWorker(ctx context.Context, co *v1alpha1.ClusterOrde
 	return false, r.fulfillment.DeleteBareMetalInstance(ctx, w.BareMetalInstance.ID)
 }
 
-// ID-less reservations may hide an accepted Create with a lost response. Even
-// empty List is not proof of absence. Recover the exact owned name and persist
-// its ID at a separate boundary before making any external mutation.
+// recoverCleanupBMI tries to recover the BMI ID for an ID-less
+// worker by listing owned instances.  When the List contains a
+// matching BMI, its ID is persisted in w for the next reconcile.
+// When no matching BMI is found, the function returns nil and
+// leaves w.BareMetalInstance.ID empty so the caller can confirm
+// absence after its own Agent-cleanup pass.
 func (r *Reconciler) recoverCleanupBMI(ctx context.Context, co *v1alpha1.ClusterOrder, tenant string, w *v1alpha1.WorkerStatus) error {
 	if w.BareMetalInstance.Name == "" {
 		return fmt.Errorf("worker %s has no recorded BMI name", w.Name)
@@ -81,7 +104,12 @@ func (r *Reconciler) recoverCleanupBMI(ctx context.Context, co *v1alpha1.Cluster
 		return r.rejectWorkerIdentity(co, err.Error())
 	}
 	if bmi == nil {
-		return fmt.Errorf("worker %s BMI reservation absence is unconfirmed", w.Name)
+		// The List API returned no owned BMI matching this
+		// worker's name.  The reservation was either never
+		// fulfilled or the instance was already cleaned up
+		// externally.  Return nil so the caller can confirm
+		// absence after its own Agent-cleanup check.
+		return nil
 	}
 	candidate := *w
 	candidate.BareMetalInstance.ID = bmi.GetId()

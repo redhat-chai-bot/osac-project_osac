@@ -259,12 +259,16 @@ var _ = Describe("Default networking provisioning", func() {
 	})
 
 	It("rejects Delete and default-label removal for system-managed VN/Subnet/SG", func(ctx context.Context) {
-		Skip("OSAC-6370: quarantined – default-network READY→PENDING fixture race")
 		tenantName := fmt.Sprintf("test-defnet-protect-%s", uuid.New())
 
 		By("Creating tenant and waiting for SYNCED")
 		tenantId := createTenant(ctx, tenantsClient, tenantName)
 		waitForTenantSynced(ctx, tenantsClient, tenantId)
+
+		// Ensure the NetworkClass has a canonical Hub binding before
+		// the VN reconciler tries to select one. Without this gate
+		// the VN controller can race the fixture's READY write.
+		waitForNetworkClassReady(ctx, networkClassesClient, networkClassId)
 
 		defaultLabelFilter := fmt.Sprintf(
 			"this.metadata.labels['osac.openshift.io/default'] == 'true' && this.metadata.tenant == %q",
@@ -283,6 +287,26 @@ var _ = Describe("Default networking provisioning", func() {
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(vnResp.GetItems()).ToNot(BeEmpty())
 			vnId = vnResp.GetItems()[0].GetId()
+		}, time.Minute, time.Second).Should(Succeed())
+
+		// Wait for the VN controller to finish its status
+		// initialization (pass 2: selectHub + setDefaults persisted)
+		// before overriding the status to READY. Without this gate
+		// the controller can read UNSPECIFIED, compute PENDING, and
+		// persist mask_paths:["status"] after the fixture's READY
+		// write, regressing the state (OSAC-6370).
+		By("Waiting for VN controller initialization (hub persisted)")
+		Eventually(func(g Gomega) {
+			resp, err := virtualNetworksClient.Get(ctx,
+				privatev1.VirtualNetworksGetRequest_builder{
+					Id: vnId,
+				}.Build())
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(resp.GetObject().GetStatus().GetHub()).ToNot(
+				BeEmpty(),
+				"VN %q hub not yet set by controller",
+				vnId,
+			)
 		}, time.Minute, time.Second).Should(Succeed())
 
 		By("Setting default VirtualNetwork to READY (no osac-operator in IT)")

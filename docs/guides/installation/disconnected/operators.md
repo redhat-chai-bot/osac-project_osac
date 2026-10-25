@@ -292,13 +292,22 @@ oc --request-timeout=30s get endpoints trust-manager -n cert-manager -o json | j
 
 Expected: `true`.
 
-**Webhook CA gate**:
+**Webhook CA structural preflight**:
 
 ```bash
 oc --request-timeout=30s get validatingwebhookconfiguration trust-manager -o json | jq -e '(.webhooks | length > 0) and all(.webhooks[]; (.clientConfig.caBundle // "" | length) > 0)'
 ```
 
-Expected: `true`. Missing serving certificate, endpoint or injected CA blocks Bundle creation; never disable admission validation.
+Expected: `true`. This proves only that CA data is present, not that the webhook's serving certificate is trusted.
+
+**Manual webhook certificate gate** — use approved certificate clients and the existing protected service inputs and owner evidence. Complete this gate before the first Bundle, when adopting an existing installation, and after serving-certificate or injected-CA rotation; final acceptance requires current evidence.
+
+1. Bind the live `trust.cert-manager.io` entry in `ValidatingWebhookConfiguration/trust-manager` to the approved release or owner-approved adopted configuration. The release Service is `cert-manager/trust-manager`, port `443` to `6443`, with path `/validate-trust-cert-manager-io-v1alpha1-bundle`; its expected certificate DNS SAN is `trust-manager.cert-manager.svc`. Retain the approved matching rules and fail-closed admission configuration; never switch to `Ignore`, exclude requests, or bypass admission to pass this gate.
+2. Privately decode that entry's exact current `clientConfig.caBundle` and parse its PEM certificates. Bind its trust anchors and issuing chain to the approved service CA references and owner evidence, not merely matching issuer names. The [pinned release](https://github.com/cert-manager/trust-manager/blob/v0.20.0/deploy/charts/trust-manager/templates/certificate.yaml) uses the self-signed `Issuer/cert-manager/trust-manager` for `Certificate/cert-manager/trust-manager`; its approved self-signed serving anchor is distinct from the OSAC distribution CA below. Do not substitute `default-ca` or an unrelated system trust store.
+3. Through approved service access, obtain the certificate chain currently served by **each** ready backend selected by the Service; require a nonempty ready-backend set. Bind each to the approved Certificate, Secret `cert-manager/trust-manager-tls` and Deployment `/tls` mount. Inspect only public certificates, never `tls.key`. A Secret's `tls.crt`, Certificate `Ready`, or rollout alone does not prove which certificate is currently served. Using **only the exact live webhook CA bundle** as trust anchors, verify signatures/chain, current validity, TLS server-authentication purpose and the actual Service DNS SAN above (not CN-only fallback or SNI alone). Disable default trust-path/store fallback and require verification errors to produce nonzero failure; for example, OpenSSL `s_client` requires `-verify_return_error`, not just printed verification warnings. Follow the approved client's [certificate verification semantics](https://docs.openssl.org/3.5/man1/openssl-verification-options/).
+4. Keep the owner-reviewed identity, exact bundle/served-chain binding and successful verification evidence in existing protected service evidence; export only already-allowlisted outcomes. A pass requires all checks against the current approved material. Missing, malformed, stale, unapproved, mismatched or unverifiable evidence blocks Bundle creation/adoption and final acceptance. After rotation, repeat verification rather than reusing the old pass. Do not regenerate a CA or weaken validation to repair a failure.
+
+This read-only certificate verification is not an admission probe or proof of API-server network reachability. A successful dry-run that skips a webhook or ignores its failure is not substitute evidence; retain [Kubernetes webhook matching and TLS requirements](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/).
 
 ### Issuer and trust distribution
 
@@ -688,7 +697,7 @@ These are manual responsibilities, not Jobs to install from the reference charts
 | 17 | `create-creds` | Governed controller credential identity, keys and authentication |
 | 19 | `create-ui-backend-creds` | Governed backend credential identity/keys and identity-owner approval |
 
-Classify each inventory entry as `guide-created`, `adopted` or `temporary`, with exact UID. A missing/failed active responsibility blocks completion. Do not fabricate Job identities for direct administrator actions.
+Classify each inventory entry as `guide-created`, `adopted` or `temporary`. Record the exact UID for each Kubernetes object entry; for direct administrator actions, use the existing run identity or protected owner-evidence reference instead. A missing/failed active responsibility blocks completion. Do not fabricate Job identities or UIDs for direct administrator actions.
 
 **Final gate** — repeats live selected-resource checks, nonempty owned-workload rollouts, original Manual-plan identities, trust, source, latest values/render/image/Secret contracts and the complete responsibility ledger. Require the recorded security-owner acknowledged exception for the pinned AAP CSV and its verified CSV-to-image mapping, and, for in-cluster Kafka, the recorded AMQ resolved-CSV/v1 compatibility decision plus all three served-v1 API checks. Missing or no-longer-applicable evidence blocks final acceptance, including for adopted installations.
 

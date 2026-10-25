@@ -29,6 +29,8 @@ Keep values, endpoint identities, discovery documents, renders, credentials, and
 
 > **WIP:** The validation commands below reference a companion toolkit that is proposed but unpublished. Replace this section with the actual toolkit identity, version, and checksum before publication.
 
+**Publication hold:** Do not publish these three installation guides (`prereqs.md`, `aap-git-source.md`, and `operators.md`) for operator use until the approved toolkit executable is actually available, its identity, version, and checksum are pinned, and all documented gates have been validated. WIP/TBF examples are not runnable acceptance gates or permission to bypass them.
+
 Once published, set `OSAC_VALIDATE` to the approved, checksum-verified executable and `PREREQS_INPUTS` to its protected input file.
 
 **WIP contract:** Each `prereqs check <gate>` is non-mutating except explicitly approved temporary service probes. It returns exit 0 with fixed `PASS <gate>` only after all required predicates pass; a nonzero exit emits fixed `FAIL <gate>` and blocks progress. Detailed inputs/results stay private. Missing, stale, ambiguous, or malformed evidence is failure, not a skip. No check creates an operator, approves an InstallPlan, or repairs Doc 1.

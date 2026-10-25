@@ -7,12 +7,14 @@ The supported scope here is Core and optional VMaaS. BMaaS and CaaS provisioning
 Use the [customer installation guide](../customer-install-guide.md) for OSAC configuration semantics and the [Helm deployment guide](../helm-deployment-guide.md) for component responsibilities. Their connected-cluster downloads, development fixtures and internal-chart installation commands are not the disconnected deployment procedure.
 
 > Do not install the internal dependency or infrastructure charts. Use their release source only as reference. Production PostgreSQL, Keycloak and Vault/OpenBao remain customer-managed services.
-
+>
 > **WIP:** This guide references a companion validation toolkit (`$OSAC_VALIDATE`) that is not yet published. The validation gates below are specification, not executable procedure, until the toolkit ships.
 
 ## 1. Entry Contract
 
 Continue in the protected administration context from `prereqs.md`. One change owner coordinates mutations across all administration hosts; local locks alone do not exclude a remote administrator.
+
+Set `NS="$OSAC_NAMESPACE"` from the protected prerequisite value; `$NS` is the same release namespace, not an independent input.
 
 | Input | Required value or contract |
 |---|---|
@@ -96,7 +98,7 @@ Use the [OpenShift operator installation procedure](https://docs.redhat.com/en/d
 
 3. Create or adopt the Namespace and correctly scoped OperatorGroup; server-validate the Subscription before applying it.
 
-4. For Manual approval, follow that exact Subscription's `status.installPlanRef`. Review every dependency CSV, bundle and image against the mirrored inventory.
+4. For Manual approval, follow that exact Subscription's `status.installPlanRef`. Review every dependency CSV, bundle and image against the mirrored inventory. Before approval or acceptance of an adopted installation, satisfy the AAP security and selected AMQ compatibility prerequisites below.
 
 5. Approve only the reviewed plan using server-enforced UID/resourceVersion preconditions. Preserve the original reviewed UID through all later reads and waits; a name alone is insufficient.
 
@@ -117,7 +119,11 @@ All OLM rows use `source: redhat-operators` and `sourceNamespace: openshift-mark
 | OpenShift Virtualization / VMaaS | `openshift-cnv` | `stable` | None specified; record resolved CSV | Automatic | `redhat-operators` | Package/Subscription `kubevirt-hyperconverged`; OwnNamespace; VMaaS only |
 
 > **CVE-2026-75884:** This AAP CSV is the last release before the CVE fix; the pin is accepted as source-correct for OSAC 0.0.24.
-> No automatic pin change is authorized. Ask the security owner for disposition (patch, accept risk or defer), and monitor for a patched CSV.
+> Source correctness is not security approval. No automatic pin change is authorized; monitor for a patched CSV.
+
+**AAP security prerequisite** — before approving its Manual plan or accepting an adopted installation, require a recorded security-owner disposition in protected runtime evidence. Continuing with this pin requires an explicit, acknowledged risk-acceptance exception for CVE-2026-75884, bound to the exact CSV, reviewed bundle/image digests and verified CSV-to-image mapping. Missing, denied or deferred authorization blocks approval and acceptance; a patch decision returns to the release/security owners rather than silently changing the pin. Recheck this authorization and mapping at final acceptance; this guide does not grant an exception.
+
+**AMQ compatibility prerequisite** — for in-cluster Kafka, record the resolved AMQ Streams CSV and reviewed bundle, plus the operator/release owner's explicit compatibility decision for that exact release and the chart's `kafka.strimzi.io/v1` consumers, before approving its Manual plan or accepting an adopted installation. A floating `stable` channel is not compatibility evidence. Missing or incompatible decisions block progress; do not invent a compatible CSV. After installation, require the strict served-v1 checks below for all three Kafka CRDs, and recheck the recorded CSV/decision and APIs at final acceptance.
 
 Core with external Kafka requires two OLM installations, plus standalone trust-manager. MCE is not installed by this guide. The VMaaS product identity here is the source's OpenShift Virtualization/CNV, not multicluster engine.
 
@@ -131,7 +137,7 @@ oc --request-timeout=30s get packagemanifest "$PACKAGE" -n openshift-marketplace
 
 Expected: `true`. A different AAP channel head blocks this reference procedure; return to the catalog compatibility owner rather than approving another bundle.
 
-**Manual-plan gate** — use the frozen, reviewed plan UID, CSV set, bundle set and Subscription specification from private inputs.
+**Manual-plan gate** — use the frozen, reviewed plan UID, CSV set, bundle set and Subscription specification from private inputs, including the AAP security authorization/verified mapping and, when selected, the AMQ resolved-CSV/v1 compatibility decision above.
 
 <!-- TBF: requires unpublished companion toolkit -->
 
@@ -139,7 +145,7 @@ Expected: `true`. A different AAP channel head blocks this reference procedure; 
 "$OSAC_VALIDATE" operators check manual-plan --inputs "$OPERATORS_INPUTS"
 ```
 
-Expected: `PASS manual-plan`; no approval or mutation is performed by this check.
+Expected: `PASS manual-plan` only with those recorded prerequisites satisfied; missing authorization, mapping or selected compatibility evidence blocks approval and acceptance. No approval or mutation is performed by this check.
 
 **CSV gate** — `$CSV` is the recorded installed CSV for `$SUB` in `$OPERATOR_NAMESPACE`.
 
@@ -178,7 +184,7 @@ Expected: `<CRD> condition met`.
 | MetalLB | `metallbs.metallb.io`, `ipaddresspools.metallb.io`, `l2advertisements.metallb.io` |
 | VMaaS | `hyperconvergeds.hco.kubevirt.io` |
 
-In-cluster Kafka additionally requires served `kafka.strimzi.io/v1` APIs; do not substitute an older API without a separate compatibility decision.
+In-cluster Kafka additionally requires served `kafka.strimzi.io/v1` APIs for the recorded compatible AMQ CSV; a compatibility decision does not waive this gate or authorize substituting an older API in this procedure.
 
 ```bash
 oc --request-timeout=30s get crd "$KAFKA_CRD" -o json | jq -e 'any(.spec.versions[]; .name == "v1" and .served == true)'
@@ -627,10 +633,34 @@ spec:
 **HyperConverged gate**:
 
 ```bash
-oc --request-timeout=30s get hyperconverged kubevirt-hyperconverged -n openshift-cnv -o json | jq -e 'any(.status.conditions[]?; .type == "Available" and .status == "True") and any(.status.conditions[]?; .type == "Degraded" and .status == "False") and any(.status.conditions[]?; .type == "Progressing" and .status == "False")'
+oc --request-timeout=30s get hyperconverged kubevirt-hyperconverged \
+  -n openshift-cnv -o json |
+jq -e '
+  .metadata.generation as $generation |
+  .status.conditions as $conditions |
+  if ($generation | type) != "number" or ($conditions | type) != "array" then
+    false
+  else
+    ($generation >= 1 and $generation == ($generation | floor)) and
+    ([
+      {type: "Available", status: "True"},
+      {type: "Degraded", status: "False"},
+      {type: "Progressing", status: "False"},
+      {type: "ReconcileComplete", status: "True"}
+    ] |
+    all(.[];
+      . as $required |
+      any($conditions[]?;
+        .type == $required.type and
+        .status == $required.status and
+        .observedGeneration == $generation
+      )
+    ))
+  end
+'
 ```
 
-Expected: `true`.
+Expected: `true`. For target OpenShift 4.22, require all four expected statuses, including `ReconcileComplete=True`, with each condition's `observedGeneration` equal to the present, positive integer `.metadata.generation`. Missing conditions, missing/invalid generation evidence, stale generations or unexpected statuses block progress. The [4.22 installation verification](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/virtualization/installing) describes the status checks; generation matching is scoped to the target 4.22 controller.
 
 **CDI gate** — use the [VMaaS mirroring](mirroring-vmaas.md) source, trust, access and no-public-contact procedure, not merely a node-level image pull.
 
@@ -660,7 +690,7 @@ These are manual responsibilities, not Jobs to install from the reference charts
 
 Classify each inventory entry as `guide-created`, `adopted` or `temporary`, with exact UID. A missing/failed active responsibility blocks completion. Do not fabricate Job identities for direct administrator actions.
 
-**Final gate** — repeats live selected-resource checks, nonempty owned-workload rollouts, original Manual-plan identities, trust, source, latest values/render/image/Secret contracts and the complete responsibility ledger.
+**Final gate** — repeats live selected-resource checks, nonempty owned-workload rollouts, original Manual-plan identities, trust, source, latest values/render/image/Secret contracts and the complete responsibility ledger. Require the recorded security-owner acknowledged exception for the pinned AAP CSV and its verified CSV-to-image mapping, and, for in-cluster Kafka, the recorded AMQ resolved-CSV/v1 compatibility decision plus all three served-v1 API checks. Missing or no-longer-applicable evidence blocks final acceptance, including for adopted installations.
 
 <!-- TBF: requires unpublished companion toolkit -->
 

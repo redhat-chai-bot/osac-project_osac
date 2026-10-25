@@ -85,7 +85,7 @@ Check affected-pool convergence:
 "$OSAC_VALIDATE" prereqs check machineconfig --inputs "$PREREQS_INPUTS"
 ```
 
-Expected: `PASS machineconfig`: every affected pool unpaused, observedGeneration=current generation, Updated=True, updatedMachineCount=machineCount, unavailable/degraded counts zero, and Degraded=False. ITMS changes drain nodes; IDMS changes do not. Consume the completed rollout; do not reapply policies here.
+Expected: `PASS machineconfig`: every affected pool unpaused, observedGeneration=current generation, Updated=True, updatedMachineCount=machineCount, unavailable/degraded counts zero, and Degraded=False. Creating an IDMS does not drain or reboot nodes; modifying or deleting an IDMS can cause node disruption. ITMS changes can drain nodes. See the [OpenShift 4.22 mirror-set behavior](https://docs.openshift.com/it/documentation/openshift_container_platform/4.22/html/disconnected_environments/updating-a-cluster-in-a-disconnected-environment). Consume the completed rollout; do not reapply policies here.
 
 | Package visibility | Required channel | Selection |
 |---|---|---|
@@ -138,7 +138,7 @@ Expected: `PASS registry` after correction. Missing manifest/blob/repository or 
 
 ## 4. Select providers and record production contracts
 
-These are **installation selections**, not six invented Helm values. Persist the original names for the downstream consumer; parse the selection file as data, never source it into a shell.
+These are **installation selections**, not seven invented Helm values. Persist the original names for the downstream consumer; parse the selection file as data, never source it into a shell.
 
 | Selection field | Allowed value and chart relationship |
 |---|---|

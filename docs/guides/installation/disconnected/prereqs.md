@@ -43,7 +43,7 @@ Once published, set `OSAC_VALIDATE` to the approved, checksum-verified executabl
 | `MIRROR_HOST` | Exact registry authority including port; never substring matching |
 | `MIRROR_CA_FILE`, `MIRROR_AUTH_FILE` | Approved CA path; owner-readable authfile containing only the exact mirror entry and read-only credentials |
 | `CATALOG_SOURCE`, `CATALOG_NAMESPACE` | `redhat-operators`, `openshift-marketplace` |
-| `VALUES_FILE`, chart directory | Protected `values-osac.yaml` and the downloaded/extracted release chart |
+| `VALUES_FILE`, `OSAC_CHART_DIR` | Protected `values-osac.yaml` and exact path to the downloaded/extracted `0.0.24` chart |
 | Approved service inputs | Endpoint, namespace, credential/CA references, and owner evidence; no credential bytes in handoffs |
 
 ## 2. Consume the mirror handoff
@@ -256,7 +256,7 @@ Expected: `PASS complete` only after all applicable checks and change-owner revi
 |---|---|
 | `prerequisite-selection.env` | Protected, data-only selections; retain explicit fields and consistent approved inputs |
 | `prereqs-completion.txt` | Private `profile`, `enable_vmaas`, `with_lvms`, `with_metallb`, `kafka_provider`, `storage_class`, `chart_version=0.0.24`, original `values_sha256` |
-| `prereqs-artifacts.sha256` and private input state | Bind original values/render, complete chart, Doc 1 lineage, provider evidence and resource identities; available for owner verification/resume, not audit export |
+| `prereqs-artifacts.sha256` and private input state | Bind original values/render, complete chart, protected `OSAC_CHART_DIR` path (consume unchanged in `aap-git-source.md`), Doc 1 lineage, provider evidence and resource identities; available for owner verification/resume, not audit export |
 | Fresh prerequisite audit directory | Only schema-versioned allowlisted outcomes, timestamp, release/selections and approved configuration checksums; never endpoints, raw logs, source paths, credential-derived hashes or private input files |
 
 For Core + VMaaS with enterprise storage/network and external Kafka, select `core-vmaas`, `enable_vmaas=true`, both `with_*` fields false, the approved storage class, and `kafka_provider=external`. The administrator sees each fixed gate result and retains exact private bindings; the record agrees with values before `operators.md` begins.

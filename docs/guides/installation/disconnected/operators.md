@@ -423,8 +423,8 @@ Examples below use release name/namespace `osac`. The actual chart plus approved
 | `$NS/config-as-code-manifest-ig` | Only `license.zip`, exact approved ZIP; label `osac.openshift.io/project=osac-aap` | External license input, Phase 1; override via `aap.configAsCode.manifestSecret` |
 | `$NS/osac-vault-credentials` | `client-secret`, dedicated canonical Vault client | Canonical secrets guide example; site may override |
 | `$NS/vault-ca-bundle` ConfigMap | `bundle.pem`, approved Vault serving CA | Canonical secrets guide example; site may use shared trusted pool |
-| `$NS/external-kafka` ConfigMap | `brokers`, `user` | Canonical external Kafka example |
-| `$NS/external-kafka-credentials` | `password` | Canonical external Kafka example |
+| `$NS/external-kafka` ConfigMap | Explicit `service.kafka.connection[].configMap`: `name=external-kafka`, `brokers`→`brokers`, `user`→`user` (`key`→`param`) | External Kafka example; `kafka.enabled=false`; no automatic wiring |
+| `$NS/external-kafka-credentials` Secret | Explicit `service.kafka.connection[].secret`: `name=external-kafka-credentials`, `password`→`password` (`key`→`param`) | External Kafka example; no automatic wiring |
 | `$NS/fulfillment-service-kafka` | `brokers`, `user`, `password` | In-cluster default destination; Phase 2 chart-owned |
 | `$NS/osac-db-config` | `url` with rendered host/database and verify-full connection | Phase 2 Helm-owned; do not pre-create |
 | `$NS/osac-db-client-cert` | Rendered client-certificate output, including required `tls.crt`/`tls.key` and configured projected keys | Phase 2 Certificate-owned; do not pre-create |

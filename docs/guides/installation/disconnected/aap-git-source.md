@@ -16,6 +16,7 @@ Expected: one full, lowercase 40-character commit. Reject a branch name, short S
 
 | Input | Required contract |
 |---|---|
+| `OSAC_CHART_DIR` | Exact protected prerequisite-handoff path to the downloaded/extracted `0.0.24` chart; consume unchanged in the chart-default check |
 | Release / source | `0.0.24`; `https://github.com/osac-project/osac` |
 | `AAP_COMMIT` | Exact full commit from `aap.configAsCode.projectGitBranch` in the actual chart's defaults |
 | Required tree | Full repository at that commit with `osac-aap/` present as a tree, not a subtree-only replacement repository |
@@ -57,7 +58,7 @@ The OSAC persona inserts the returned URL into `aap.configAsCode.projectGitUri` 
 
 ## 4. Delivery gate and failure flow (WIP — toolkit unpublished)
 
-> **WIP:** The delivery gate requires the unpublished companion toolkit, an approved version/checksum and the protected `$AAP_GIT_INPUTS` schema. Do not execute the gate until the toolkit is available; accept the handoff only after it passes.
+> **WIP:** The proposed delivery gate is unavailable until the companion toolkit identity/version/checksum and protected `AAP_GIT_INPUTS` path, schema and producer/handoff contract are approved and available. Do not execute the TBF invocation below until then; accept the handoff only after the gate passes.
 
 The gate validates only; it never configures the Git service/firewall or changes the source ref. Any temporary cluster probe requires explicit approval and UID-scoped cleanup.
 

@@ -497,7 +497,7 @@ Expected: `PASS vault-handoff`; canonical service-owner evidence plus actual ren
 
 - Reference coordinates are `osac-kafka/osac-kafka`; retain any approved override in `kafka.clusterNamespace` and `kafka.clusterName`.
 
-- The Phase 1 identity is unique `phase1-kafka-$RUN_ID`, with its recorded UID and canonical permission contract. Final fulfillment KafkaUser/password/destination Secret remain Phase 2-owned.
+- For in-cluster Kafka, the Phase 1 identity is unique `phase1-kafka-$RUN_ID`, with its recorded UID and canonical permission contract. Final fulfillment KafkaUser/password/destination Secret remain Phase 2-owned.
 
 **Broker gate** — in-cluster only:
 
@@ -515,7 +515,7 @@ Expected: `true`.
 "$OSAC_VALIDATE" operators check kafka --inputs "$OPERATORS_INPUTS"
 ```
 
-Expected: `PASS kafka`. Operator CSV readiness alone is not broker or client readiness. Retire only the recorded temporary probe identity through owner-approved UID-preconditioned cleanup.
+Expected: `PASS kafka`. Operator CSV readiness alone is not broker or client readiness. For in-cluster Kafka, retire only the recorded temporary probe identity through owner-approved UID-preconditioned cleanup.
 
 ### AAP Git source handoff
 

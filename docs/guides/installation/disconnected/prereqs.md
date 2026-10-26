@@ -59,7 +59,7 @@ Doc 1 owns one ISC and workspace lineage, registry population, and generated-res
 | `signature-configmap.yaml` | Generated signature identity and Doc 1 managed-signature evidence |
 | ISC and workspace | Original configuration, selected inventory, generated files, and incremental lineage |
 | Affected pools | Explicit pool names and expected current generations from the change owner |
-| VMaaS source selection | Nonempty `selected-diskimage-sources.json` with exact selected upstream references and tags |
+| VMaaS source selection (when `enable_vmaas=true`) | Nonempty `selected-diskimage-sources.json` with exact selected upstream references and tags; omit for `enable_vmaas=false` |
 
 Check default-source isolation:
 

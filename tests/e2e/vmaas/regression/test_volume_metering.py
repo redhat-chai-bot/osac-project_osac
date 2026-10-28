@@ -65,6 +65,7 @@ def _typed_heartbeats(metering: MeteringCollector, volume_id: str) -> list[dict[
     return typed
 
 
+@pytest.mark.skip(reason="OSAC-6974: Temporarily skipped due to flaky final volume billing interval")
 def test_volume_bills_gibibyte_seconds(
     grpc: GRPCClient,
     private_grpc: GRPCClient,

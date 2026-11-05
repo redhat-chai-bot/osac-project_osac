@@ -32,8 +32,7 @@ registry.
 
 | Check | Command / evidence |
 | ----- | ------------------ |
-| Phase 1B complete: `osac-aap:0.0.45` image mirrored | Image present in mirror registry |
-| IDMS/ITMS applied to the cluster | `oc get idms` `oc get itms` `oc get clustercatalog` `oc get catalogsource` |
+| Category B execution-environment inventory selected | Shared ISC `mirror.additionalImages` includes `ghcr.io/osac-project/osac-aap:0.0.45` |
 | Mirror registry reachable from cluster nodes | Node-level pull test succeeds |
 
 ## Resources Required
@@ -121,6 +120,18 @@ and exact mirror content. An image-name grep is not policy or content
 acceptance.
 
 ### Step 3 — Verify mirror inventory *(Doc 1 scope ends here)*
+
+After the shared mirror run and Category A apply gate, before handoff:
+
+- Verify the **Category B image** `ghcr.io/osac-project/osac-aap:0.0.45`
+  is present using its direct mirror reference in the approved administration-host
+  mirror-read client context.
+- Verify live IDMS/ITMS coverage for selected AAP images, using IDMS for digests
+  and ITMS for tags, with nonempty mirrors and `NeverContactSource` on the
+  most-specific matching source. Use the
+  [live-rule acceptance check](README.md#live-core-image-mirror-rules) for the
+  execution-environment image; review operator-related images from the selected
+  catalog inventory in the same way.
 
 Doc 1 covers mirror inventory and AAP catalog graph checks
 only.  License secret creation, operator operand installation,

@@ -33,7 +33,7 @@ registry.
 | Check | Command / evidence |
 | ----- | ------------------ |
 | Category B execution-environment inventory selected | Shared ISC `mirror.additionalImages` includes `ghcr.io/osac-project/osac-aap:0.0.45` |
-| Mirror registry reachable from cluster nodes | Node-level pull test succeeds |
+| Approved mirror authority, CA and read-access binding selected | Retain the approved inputs before mirroring; node transport is checked only after the full mirror at Category A Step 2c |
 
 ## Resources Required
 
@@ -123,6 +123,8 @@ acceptance.
 
 After the shared mirror run and Category A apply gate, before handoff:
 
+- Retain Category A Step 2c's node-transport checkpoint result; do not require
+  a node pull or applied mirror rules before composing the inventory.
 - Verify the **Category B image** `ghcr.io/osac-project/osac-aap:0.0.45`
   is present using its direct mirror reference in the approved administration-host
   mirror-read client context.

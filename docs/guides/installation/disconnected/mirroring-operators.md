@@ -247,9 +247,11 @@ oc mirror -c imageset-config.yaml \
 
 ### Step 2 — Apply generated cluster resources (disconnected cluster)
 
-The `oc mirror` run generates five cluster resource files.  Apply
-them in the following order to avoid broken image resolution or
-duplicate catalog sources.
+The `oc mirror` run generates mirror sets and selected catalog resources.
+Release signatures are additionally required when platform release mirroring
+is selected; the artifact count is not fixed. Apply the generated resources
+in the following order to avoid broken image resolution or duplicate catalog
+sources.
 
 #### 2a. Disable default catalog sources
 
@@ -347,12 +349,17 @@ other kind or coverage of the selected references.
 set -euo pipefail
 resource_dir=oc-mirror-workspace/working-dir/cluster-resources
 test -d "$resource_dir" || exit 1
-platform_selected=$(yq -o=json '.' imageset-config.yaml | jq -r '
+platform_selected=$(yq -o=json '.' imageset-config.yaml | jq -sr '
+  if length != 1 or (.[0] | type != "object") or
+     (.[0].mirror | type != "object")
+  then error("one ISC document with a mirror object is required")
+  else .[0] |
   if .mirror.platform == null then false
   elif (.mirror.platform | type == "object") and
        (.mirror.platform.channels | type == "array" and length > 0)
   then true
   else error("mirror.platform must select release channels or be omitted") end
+  end
 ')
 if [ "$platform_selected" = true ]; then
   test -s "$resource_dir/signature-configmap.yaml" || {
@@ -532,12 +539,17 @@ done
 # oc-mirror v2 labels the generated ConfigMap
 # release.openshift.io/verification-signatures, not
 # operator.openshift.io/managed=true.
-platform_selected=$(yq -o=json '.' imageset-config.yaml | jq -r '
+platform_selected=$(yq -o=json '.' imageset-config.yaml | jq -sr '
+  if length != 1 or (.[0] | type != "object") or
+     (.[0].mirror | type != "object")
+  then error("one ISC document with a mirror object is required")
+  else .[0] |
   if .mirror.platform == null then false
   elif (.mirror.platform | type == "object") and
        (.mirror.platform.channels | type == "array" and length > 0)
   then true
   else error("mirror.platform must select release channels or be omitted") end
+  end
 ') || exit 1
 if [ "$platform_selected" = true ]; then
   test -s oc-mirror-workspace/working-dir/cluster-resources/signature-configmap.yaml || {

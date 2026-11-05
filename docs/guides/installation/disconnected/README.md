@@ -12,6 +12,7 @@
   - [Key Principles](#key-principles)
   - [Quick Reference](#quick-reference)
   - [Doc 1 Acceptance Gate](#doc-1-acceptance-gate)
+    - [Live Core image mirror rules](#live-core-image-mirror-rules)
 
 Category-specific guides for mirroring OSAC images and dependencies into a disconnected (air-gapped) mirror registry.
 
@@ -155,7 +156,7 @@ flowchart TD
     ISC --> DRY[Dry run]
     DRY -->|pass| FULL[Full mirror using same workspace]
     DRY -->|fail| ISC
-    FULL --> APPLY[Apply five generated resources]
+    FULL --> APPLY[Apply generated mirror sets and catalogs; signatures if platform selected]
     APPLY --> MCP[Wait for MCP convergence]
     MCP --> GATE{Doc 1 acceptance gate}
     GATE -->|pass| PRE["Doc 2: prereqs.md"]

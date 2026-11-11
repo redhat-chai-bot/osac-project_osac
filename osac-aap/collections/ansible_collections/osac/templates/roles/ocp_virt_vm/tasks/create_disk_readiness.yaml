@@ -1,0 +1,51 @@
+---
+# For 0.4 only: ticket - OSAC-7670
+# Remove this initial inventory bridge when storage provisioning takes over.
+# Use the job snapshot, never a later live desired version or disk mapping.
+- name: Clear previous disk readiness attestation on the hub ComputeInstance
+  kubernetes.core.k8s:
+    api_version: osac.openshift.io/v1alpha1
+    kind: ComputeInstance
+    name: "{{ compute_instance_name }}"
+    namespace: "{{ compute_instance.metadata.namespace }}"
+    state: present
+    definition:
+      metadata:
+        annotations:
+          osac.openshift.io/disk-readiness: null
+
+- name: Initialize expected disk readiness checks
+  ansible.builtin.set_fact:
+    vm_disks_ready: true
+    vm_expected_disks: "{{ [{'key': 'boot', 'name': compute_instance_name ~ '-root-disk'}] }}"
+
+- name: Add expected additional disks
+  ansible.builtin.set_fact:
+    vm_expected_disks: "{{ vm_expected_disks + [{'key': 'disk-' ~ (disk_index + 1), 'name': compute_instance_name ~ '-disk-' ~ (disk_index + 1)}] }}"
+  loop: "{{ vm_additional_disks | default([]) }}"
+  loop_control:
+    index_var: disk_index
+
+- name: Check every expected disk
+  ansible.builtin.include_tasks: check_disk_readiness.yaml
+  loop: "{{ vm_expected_disks }}"
+  loop_control:
+    loop_var: expected_disk
+
+- name: Attest verified disks for the provisioning input on the hub ComputeInstance
+  kubernetes.core.k8s:
+    api_version: osac.openshift.io/v1alpha1
+    kind: ComputeInstance
+    name: "{{ compute_instance_name }}"
+    namespace: "{{ compute_instance.metadata.namespace }}"
+    state: present
+    definition:
+      metadata:
+        annotations:
+          osac.openshift.io/disk-readiness: >-
+            {{ {'configVersion': compute_instance.status.desiredConfigVersion,
+                'diskVolumeIDs': vm_disk_volume_ids} | to_json }}
+  when:
+    - vm_disks_ready | bool
+    - vm_disk_volume_ids | length == vm_expected_disks | length
+    - compute_instance.status.desiredConfigVersion | default('') | length > 0

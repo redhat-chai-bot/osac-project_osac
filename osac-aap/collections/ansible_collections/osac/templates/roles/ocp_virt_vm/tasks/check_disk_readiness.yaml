@@ -1,0 +1,38 @@
+---
+# For 0.4 only: ticket - OSAC-7670
+# A Halted VM may have no WFFC consumer: observe once, without starting/binding it.
+# Running attempts poll only after VM creation so the consumer can be scheduled.
+- name: Verify DataVolume initialization and persisted inventory identity
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
+    api_version: cdi.kubevirt.io/v1beta1
+    kind: DataVolume
+    name: "{{ expected_disk.name }}"
+    namespace: "{{ compute_instance_target_namespace }}"
+  register: disk_datavolume
+  until: >-
+    vm_run_strategy == 'Halted' or
+    (disk_datavolume.resources | osac.templates.disk_volume_initialized(vm_disk_volume_ids.get(expected_disk.key, '')))
+  retries: "{{ disk_readiness_retries | default(60) }}"
+  delay: "{{ disk_readiness_delay | default(10) }}"
+
+- name: Verify the initialized DataVolume claim is Bound
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"
+    api_version: v1
+    kind: PersistentVolumeClaim
+    name: "{{ (disk_datavolume.resources | first | default({})).get('status', {}).get('claimName') | default(expected_disk.name, true) }}"
+    namespace: "{{ compute_instance_target_namespace }}"
+  register: disk_pvc
+  until: >-
+    vm_run_strategy == 'Halted' or
+    (disk_pvc.resources | length == 1 and disk_pvc.resources[0].get('status', {}).get('phase') == 'Bound')
+  retries: "{{ disk_readiness_retries | default(60) }}"
+  delay: "{{ disk_readiness_delay | default(10) }}"
+
+- name: Record whether this disk was verified
+  ansible.builtin.set_fact:
+    vm_disks_ready: >-
+      {{ vm_disks_ready and
+         (disk_datavolume.resources | osac.templates.disk_volume_initialized(vm_disk_volume_ids.get(expected_disk.key, ''))) and
+         disk_pvc.resources | length == 1 and disk_pvc.resources[0].get('status', {}).get('phase') == 'Bound' }}

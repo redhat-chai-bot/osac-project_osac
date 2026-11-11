@@ -165,6 +165,14 @@ func (t *task) update(ctx context.Context) error {
 		return nil
 	}
 
+	// For 0.4 only: ticket - OSAC-7670
+	// CI disks are inventory while the playbook provisions their DataVolumes.
+	// Remove this bypass when storage provisioning takes over those disks.
+	segments := t.volume.GetSpec().GetTopology().GetSegments()
+	if len(segments) == 1 && segments["osac.io/node"] == "osac-volume-registration-pending" {
+		return nil
+	}
+
 	hubJustSelected := t.volume.GetStatus().GetHub() == ""
 	if err := t.selectHub(ctx); err != nil {
 		return err

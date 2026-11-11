@@ -16,6 +16,7 @@ package computeinstance
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -44,6 +45,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	osacv1alpha1 "github.com/osac-project/osac/osac-operator/api/v1alpha1"
+	"github.com/osac-project/osac/osac-operator/pkg/provisioning"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/controllers"
 	"github.com/osac-project/osac/fulfillment-service/internal/controllers/finalizers"
@@ -1406,6 +1408,53 @@ var _ = Describe("disk registration handoff from the reconciler", func() {
 		Expect(volumesClient.createRequests).To(BeEmpty())
 		Expect(volumesClient.listRequests).To(BeEmpty())
 	})
+
+	DescribeTable("retries inventory errors without failing or reprovisioning a healthy CI", func(readFailure bool) {
+		ctrl := gomock.NewController(GinkgoT())
+		instance := newInstance()
+		instance.GetSpec().SetAdditionalDisks(nil)
+		instance.GetStatus().SetVolumes([]*privatev1.ComputeInstanceVolume{
+			privatev1.ComputeInstanceVolume_builder{DiskKey: "boot", VolumeId: "volume-boot"}.Build(),
+		})
+		registrations := &registrationVolumesClient{}
+		cr := newComputeInstanceCR(instance.GetId(), hubNamespace, "healthy-inventory", nil)
+		f, computeClient, hubClient := newHarness(ctrl, instance, registrations, interceptor.Funcs{}, cr)
+		builder := &task{r: f, computeInstance: instance}
+		spec, err := builder.buildSpecWithNetworkAttachments(context.Background(), false)
+		Expect(err).NotTo(HaveOccurred())
+		cr.Spec = spec
+		version, err := provisioning.ComputeDesiredConfigVersion(spec)
+		Expect(err).NotTo(HaveOccurred())
+		cr.Status.DesiredConfigVersion, cr.Status.ProvisionConfigVersion = version, version
+		cr.Status.Jobs = []osacv1alpha1.NetworkJobStatus{{
+			Task: "provision", Manager: osacv1alpha1.NetworkJobManagerNone, State: osacv1alpha1.NetworkJobStateSucceeded,
+		}}
+		cr.SetStatusCondition(osacv1alpha1.ComputeInstanceConditionConfigurationApplied, metav1.ConditionTrue, "", osacv1alpha1.ReasonAsExpected)
+		payload, err := json.Marshal(diskReadiness{ConfigVersion: version, DiskVolumeIDs: spec.DiskVolumeIDs})
+		Expect(err).NotTo(HaveOccurred())
+		cr.Annotations = map[string]string{diskReadinessAnnotation: string(payload)}
+		Expect(hubClient.Update(context.Background(), cr)).To(Succeed())
+		_, _, _, volumesClient := availabilityFixture()
+		volume := volumesClient.volumes["volume-boot"]
+		volume.GetMetadata().SetName("ci-" + instance.GetId() + "-boot")
+		volume.GetMetadata().SetTenant(instance.GetMetadata().GetTenant())
+		volume.GetMetadata().SetProject(instance.GetMetadata().GetProject())
+		if readFailure {
+			volumesClient.readErr = errors.New("transient inventory read")
+		} else {
+			volumesClient.failID = "volume-boot"
+		}
+		f.volumesClient = volumesClient
+		Expect(controllers.IsRequeueable(f.run(context.Background(), instance))).To(BeTrue())
+		for _, condition := range computeClient.object.GetStatus().GetConditions() {
+			Expect(condition.GetReason()).NotTo(Equal("ReconciliationFailed"))
+		}
+		Expect(instance.GetStatus().GetState()).NotTo(Equal(privatev1.ComputeInstanceState_COMPUTE_INSTANCE_STATE_FAILED))
+		Expect(registrations.createRequests).To(BeEmpty())
+		volumesClient.readErr, volumesClient.failID = nil, ""
+		Expect(f.run(context.Background(), instance)).To(Succeed())
+		Expect(volumesClient.volumes["volume-boot"].GetStatus().GetState()).To(Equal(privatev1.VolumeState_VOLUME_STATE_AVAILABLE))
+	}, Entry("read", true), Entry("write", false))
 
 	It("holds an existing managed CR while its zero-ID intent remains uncertain", func() {
 		ctrl := gomock.NewController(GinkgoT())

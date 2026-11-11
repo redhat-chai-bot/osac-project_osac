@@ -246,7 +246,19 @@ func (s *PrivateVolumesServer) Update(ctx context.Context,
 	// Set the merged spec back into the request for the generic update:
 	request.GetObject().SetSpec(merged.GetSpec())
 
-	err = s.generic.Update(ctx, request, &response)
+	err = s.generic.UpdateWithCandidatePreparation(ctx, request, &response,
+		func(_ context.Context, current, candidate *privatev1.Volume) error {
+			// For 0.4 only: ticket - OSAC-7670
+			// Protect the initial inventory bridge under the database row lock.
+			// Delete does not increment versions; remove with playbook provisioning.
+			if current.GetMetadata().HasDeletionTimestamp() &&
+				current.GetStatus().GetState() == privatev1.VolumeState_VOLUME_STATE_CREATING &&
+				candidate.GetStatus().GetState() == privatev1.VolumeState_VOLUME_STATE_AVAILABLE {
+				return grpcstatus.Error(grpccodes.FailedPrecondition,
+					"cannot mark initial volume inventory available after deletion has started")
+			}
+			return nil
+		})
 	return
 }
 

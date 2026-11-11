@@ -1065,6 +1065,17 @@ follow-up; extending the existing static-fixture suite alone is insufficient.
 
 Touched-area requirements: [component guide](../osac-aap/AGENTS.md#integration-testing).
 
+The OSAC-7670 initial disk-readiness bridge has two separate boundaries.
+`uv run pytest tests/unit/test_compute_instance_disk_readiness.py` executes the
+actual Ansible tasks with Kubernetes module doubles. The registered
+`compute_instance_create:disk_readiness` component target in `make test` uses
+the real disposable Kind API for hub annotation removal/update and static
+PV/PVC binding. DataVolume phases are fixtures, not CDI imports. See the
+[focused command and exclusions](../osac-aap/tests/integration/targets/compute_instance_create/README.md#disk-readiness-evidence).
+Neither test proves real WFFC scheduling, provider provisioning, guest I/O or
+the supported deployed OSAC start journey; that provider/deployed coverage
+remains an unresolved gap unless separately executed and reported.
+
 ### Test tiers and commands
 
 | Tier | Location / command | Exercises for real | Faked or omitted |

@@ -86,6 +86,7 @@ ROLE_SCENARIO_TESTS=(
   "compute_instance_create:sysprep_secret_copy"
   "compute_instance_create:volume_id_validation"
   "compute_instance_create:volume_id_annotations"
+  "compute_instance_create:disk_readiness"
   "compute_instance_create:storage_tier_mapping"
   "compute_instance_create:csp_storage_tiers"
   "bmaas_metal3:lifecycle"

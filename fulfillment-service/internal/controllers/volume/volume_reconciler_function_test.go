@@ -285,6 +285,7 @@ var _ = Describe("update", func() {
 		Entry("CI inventory", map[string]string{"osac.io/node": "osac-volume-registration-pending"}, true),
 		Entry("standalone node", map[string]string{"osac.io/node": "worker-1"}, false),
 		Entry("missing topology", nil, false),
+		Entry("empty node", map[string]string{"osac.io/node": ""}, false),
 		Entry("not a prefix", map[string]string{"osac.io/node": "osac-volume-registration-pending-other"}, false),
 		Entry("not a superset", map[string]string{"osac.io/node": "osac-volume-registration-pending", "zone": "a"}, false),
 	)
@@ -295,12 +296,19 @@ var _ = Describe("update", func() {
 			Spec: privatev1.VolumeSpec_builder{Topology: privatev1.VolumeTopology_builder{
 				Segments: map[string]string{"osac.io/node": "osac-volume-registration-pending"},
 			}.Build()}.Build(),
+			Status: privatev1.VolumeStatus_builder{
+				State:               privatev1.VolumeState_VOLUME_STATE_AVAILABLE,
+				StateTransitionTime: controllers.NowTruncated(),
+			}.Build(),
 		}.Build()
+		transitionTime := volume.GetStatus().GetStateTransitionTime()
 		task := &task{r: &function{logger: logger}, volume: volume}
 		Expect(task.update(context.Background())).To(Succeed())
 		Expect(hasFinalizer(volume)).To(BeTrue())
 		Expect(task.update(context.Background())).To(Succeed())
 		Expect(volume.GetStatus().GetHub()).To(BeEmpty())
+		Expect(volume.GetStatus().GetState()).To(Equal(privatev1.VolumeState_VOLUME_STATE_AVAILABLE))
+		Expect(volume.GetStatus().GetStateTransitionTime()).To(Equal(transitionTime))
 		volume.GetMetadata().SetTenant("")
 		Expect(task.update(context.Background())).To(Succeed())
 		Expect(volume.GetStatus().GetState()).To(Equal(privatev1.VolumeState_VOLUME_STATE_FAILED))

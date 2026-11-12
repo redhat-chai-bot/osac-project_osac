@@ -37,6 +37,7 @@ import (
 	"github.com/osac-project/osac/fulfillment-service/internal/kubernetes/annotations"
 	"github.com/osac-project/osac/fulfillment-service/internal/kubernetes/labels"
 	"github.com/osac-project/osac/fulfillment-service/internal/masks"
+	"github.com/osac-project/osac/fulfillment-service/internal/utils"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 )
 
@@ -168,8 +169,7 @@ func (t *task) update(ctx context.Context) error {
 	// For 0.4 only: ticket - OSAC-7670
 	// CI disks are inventory while the playbook provisions their DataVolumes.
 	// Remove this bypass when storage provisioning takes over those disks.
-	segments := t.volume.GetSpec().GetTopology().GetSegments()
-	if len(segments) == 1 && segments["osac.io/node"] == "osac-volume-registration-pending" {
+	if utils.IsComputeInstanceVolumeInventory(t.volume) {
 		return nil
 	}
 

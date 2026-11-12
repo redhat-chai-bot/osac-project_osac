@@ -3,9 +3,6 @@
   ansible.builtin.debug:
     msg: "Namespace {{ compute_instance_target_namespace }} - Name: {{ compute_instance_name }}"
 
-- name: Verify disk readiness after resource creation
-  ansible.builtin.include_tasks: create_disk_readiness.yaml
-
 - name: Wait for VM to be ready
   kubernetes.core.k8s_info:
     kubeconfig: "{{ remote_cluster_kubeconfig | default(omit) }}"

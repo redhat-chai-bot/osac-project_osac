@@ -393,7 +393,7 @@ func (t *task) update(ctx context.Context) error {
 		return err
 	}
 
-	return t.reconcileVolumeAvailability(ctx, object, spec)
+	return nil
 }
 
 func (t *task) reconcileDiskRegistrationForWorkload(ctx context.Context, workloadAbsent bool) (bool, error) {

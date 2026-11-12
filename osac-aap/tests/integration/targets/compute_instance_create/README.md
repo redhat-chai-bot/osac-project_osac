@@ -1,29 +1,5 @@
 # ComputeInstance storage mapping integration
 
-## Disk readiness evidence
-
-`disk_readiness` executes the real post-create disk readiness tasks and
-Kubernetes modules against the disposable Kind API. It checks removal of stale
-hub annotations, Halted creation with unbound claims, boot and data claim
-binding, snapshot-config attestation despite a later live config, mismatched
-persisted IDs, and preservation of the separate reconciled-config annotation.
-The test is registered in `make test`. After the standard integration setup,
-run the focused boundary from `osac-aap/` with:
-
-```bash
-KUBECONFIG="$PWD/tests/integration/kubeconfig-osac-test" uv run ansible-playbook \
-  tests/integration/targets/compute_instance_create/tasks/disk_readiness.yml
-```
-
-DataVolume phases are explicit API fixtures with CDI controllers scaled down.
-PVCs bind through the real Kubernetes controller to test-owned static hostPath
-PVs, with no mounted workload or guest I/O. This proves the readiness consumer
-and annotation transport, not real CDI imports, provider provisioning, WFFC
-scheduling, actual VM start, or the OSAC start API. Those provider and deployed
-journeys remain separate coverage requirements.
-
-## StorageClass mapping
-
 `storage_tier_mapping` runs the real top-level ComputeInstance create playbook
 against Kind. It checks boot and additional-disk StorageClasses, sizes, sources,
 access modes on persisted DataVolumes, including

@@ -16,6 +16,7 @@ package servers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -27,6 +28,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
+	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
 )
 
 var _ = Describe("Private volumes server", func() {
@@ -191,6 +193,67 @@ var _ = Describe("Private volumes server", func() {
 			Expect(obj.GetId()).To(Equal(created.GetId()))
 			Expect(obj.GetSpec().GetStorageTier()).To(Equal("gold"))
 		})
+
+		DescribeTable("persists registration-only inventory state through private and public reads",
+			func(segments map[string]string, inventory, suppliedStatus bool) {
+				volume := privatev1.Volume_builder{
+					Metadata: privatev1.Metadata_builder{Name: "registered-disk", Tenant: testTenant}.Build(),
+					Spec: privatev1.VolumeSpec_builder{
+						StorageTier: "gold", SizeGib: 100,
+						AccessMode: privatev1.VolumeAccessMode_VOLUME_ACCESS_MODE_READ_WRITE_ONCE,
+						Topology:   privatev1.VolumeTopology_builder{Segments: segments}.Build(),
+					}.Build(),
+				}.Build()
+				if suppliedStatus {
+					volume.SetStatus(privatev1.VolumeStatus_builder{
+						State: privatev1.VolumeState_VOLUME_STATE_FAILED, Message: new("stale failure"),
+						StateTransitionTime: timestamppb.New(time.Unix(1, 0)),
+						VendorVolumeId:      "caller-supplied-id", ProvisionedSizeGib: 999, Hub: "caller-hub",
+						VendorContext: map[string]string{"caller": "context"},
+						Provider:      "caller-provider", Protocol: privatev1.StorageProtocol_STORAGE_PROTOCOL_NFS,
+					}.Build())
+				}
+				before := time.Now().Truncate(time.Second)
+				created, err := server.Create(ctx, privatev1.VolumesCreateRequest_builder{Object: volume}.Build())
+				Expect(err).NotTo(HaveOccurred())
+				stored, err := server.Get(ctx, privatev1.VolumesGetRequest_builder{Id: created.GetObject().GetId()}.Build())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(proto.Equal(created.GetObject(), stored.GetObject())).To(BeTrue())
+				actual := stored.GetObject()
+				state := privatev1.VolumeState_VOLUME_STATE_CREATING
+				if inventory {
+					state = privatev1.VolumeState_VOLUME_STATE_AVAILABLE
+					Expect(actual.GetStatus().GetStateTransitionTime()).NotTo(BeNil())
+					Expect(actual.GetStatus().GetStateTransitionTime().GetNanos()).To(BeZero())
+					Expect(actual.GetStatus().GetStateTransitionTime().AsTime()).To(BeTemporally(">=", before))
+					Expect(actual.GetStatus().GetStateTransitionTime().AsTime()).To(BeTemporally("<=", time.Now()))
+					Expect(actual.GetStatus().GetMessage()).To(BeEmpty())
+				}
+				Expect(actual.GetStatus().GetState()).To(Equal(state))
+				Expect(actual.GetStatus().GetVendorVolumeId()).To(BeEmpty())
+				Expect(actual.GetStatus().GetProvisionedSizeGib()).To(BeZero())
+				Expect(actual.GetStatus().GetVendorContext()).To(BeEmpty())
+				Expect(actual.GetStatus().GetHub()).To(BeEmpty())
+				Expect(actual.GetStatus().GetProvider()).To(Equal("test-provider"))
+				Expect(actual.GetStatus().GetProtocol()).To(Equal(privatev1.StorageProtocol_STORAGE_PROTOCOL_BLOCK))
+				Expect(actual.GetSpec().GetSizeGib()).To(Equal(int64(100)))
+				Expect(actual.GetMetadata().GetTenant()).To(Equal(testTenant))
+				publicServer, err := NewVolumesServer().SetLogger(logger).
+					SetAttributionLogic(attribution).SetTenancyLogic(tenancy).
+					SetTierResolver(server.tierResolver).Build()
+				Expect(err).NotTo(HaveOccurred())
+				public, err := publicServer.Get(ctx, publicv1.VolumesGetRequest_builder{Id: actual.GetId()}.Build())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(public.GetObject().GetStatus().GetState().String()).To(Equal(state.String()))
+				Expect(public.GetObject().GetStatus().GetMessage()).To(Equal(actual.GetStatus().GetMessage()))
+			},
+			Entry("CI inventory", map[string]string{"osac.io/node": "osac-volume-registration-pending"}, true, false),
+			Entry("CI inventory discards stale vendor status", map[string]string{"osac.io/node": "osac-volume-registration-pending"}, true, true),
+			Entry("ordinary CSI", map[string]string{"osac.io/node": "worker-1"}, false, false),
+			Entry("empty topology", nil, false, false),
+			Entry("near match", map[string]string{"osac.io/node": "osac-volume-registration-pending-other"}, false, false),
+			Entry("extra key", map[string]string{"osac.io/node": "osac-volume-registration-pending", "zone": "a"}, false, false),
+		)
 
 		It("stamps the resolved provider over caller-provided status", func() {
 			response, err := server.Create(ctx, privatev1.VolumesCreateRequest_builder{
@@ -409,99 +472,6 @@ var _ = Describe("Private volumes server", func() {
 			Expect(updateResponse.GetObject().GetStatus().GetProtocol()).To(Equal(
 				privatev1.StorageProtocol_STORAGE_PROTOCOL_BLOCK))
 			Expect(updateResponse.GetObject().GetSpec().GetStorageTier()).To(Equal("gold"))
-		})
-
-		It("Accepts a locked initial inventory status update with a narrow mask", func() {
-			created := createVolume()
-			created.SetStatus(privatev1.VolumeStatus_builder{
-				State:   privatev1.VolumeState_VOLUME_STATE_CREATING,
-				Message: new("waiting for disk readiness"),
-			}.Build())
-			initial, err := server.Update(ctx, privatev1.VolumesUpdateRequest_builder{
-				Object: created,
-				Lock:   true,
-				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
-					"status.state", "status.message",
-				}},
-			}.Build())
-			Expect(err).ToNot(HaveOccurred())
-			created = initial.GetObject()
-			updated := proto.Clone(created).(*privatev1.Volume)
-			transitionTime := timestamppb.Now()
-			updated.SetStatus(privatev1.VolumeStatus_builder{
-				State:               privatev1.VolumeState_VOLUME_STATE_AVAILABLE,
-				StateTransitionTime: transitionTime,
-			}.Build())
-			response, err := server.Update(ctx, privatev1.VolumesUpdateRequest_builder{
-				Object: updated,
-				Lock:   true,
-				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
-					"status.state", "status.state_transition_time", "status.message",
-				}},
-			}.Build())
-			Expect(err).ToNot(HaveOccurred())
-			actual := response.GetObject()
-			Expect(actual.GetStatus().GetState()).To(Equal(privatev1.VolumeState_VOLUME_STATE_AVAILABLE))
-			Expect(proto.Equal(actual.GetStatus().GetStateTransitionTime(), transitionTime)).To(BeTrue())
-			Expect(actual.GetStatus().GetMessage()).To(BeEmpty())
-			Expect(actual.GetStatus().GetProvider()).To(Equal(created.GetStatus().GetProvider()))
-			Expect(proto.Equal(actual.GetSpec(), created.GetSpec())).To(BeTrue())
-		})
-
-		It("Rejects a locked inventory status write after another update", func() {
-			created := createVolume()
-			changed := proto.Clone(created).(*privatev1.Volume)
-			changed.GetStatus().SetMessage("new inventory observation")
-			_, err := server.Update(ctx, privatev1.VolumesUpdateRequest_builder{
-				Object:     changed,
-				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"status.message"}},
-			}.Build())
-			Expect(err).ToNot(HaveOccurred())
-			created.GetStatus().SetState(privatev1.VolumeState_VOLUME_STATE_AVAILABLE)
-			created.GetStatus().SetStateTransitionTime(timestamppb.Now())
-			_, err = server.Update(ctx, privatev1.VolumesUpdateRequest_builder{
-				Object: created,
-				Lock:   true,
-				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
-					"status.state", "status.state_transition_time", "status.message",
-				}},
-			}.Build())
-			Expect(status.Code(err)).To(Equal(codes.Aborted))
-			current, err := server.Get(ctx, privatev1.VolumesGetRequest_builder{Id: created.GetId()}.Build())
-			Expect(err).ToNot(HaveOccurred())
-			Expect(current.GetObject().GetStatus().GetState()).To(Equal(privatev1.VolumeState_VOLUME_STATE_CREATING))
-			Expect(current.GetObject().GetStatus().GetMessage()).To(Equal("new inventory observation"))
-		})
-
-		It("Rejects a locked inventory status write after deletion has started", func() {
-			created := createVolume()
-			created.GetMetadata().SetFinalizers([]string{"test-inventory"})
-			response, err := server.Update(ctx, privatev1.VolumesUpdateRequest_builder{
-				Object:     created,
-				Lock:       true,
-				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"metadata.finalizers"}},
-			}.Build())
-			Expect(err).ToNot(HaveOccurred())
-			stale := response.GetObject()
-			_, err = server.Delete(ctx, privatev1.VolumesDeleteRequest_builder{Id: stale.GetId()}.Build())
-			Expect(err).ToNot(HaveOccurred())
-			stale.SetStatus(privatev1.VolumeStatus_builder{
-				State:               privatev1.VolumeState_VOLUME_STATE_AVAILABLE,
-				StateTransitionTime: timestamppb.Now(),
-			}.Build())
-			_, err = server.Update(ctx, privatev1.VolumesUpdateRequest_builder{
-				Object: stale,
-				Lock:   true,
-				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{
-					"status.state", "status.state_transition_time", "status.message",
-				}},
-			}.Build())
-			Expect(status.Code(err)).To(Equal(codes.FailedPrecondition))
-			Expect(status.Convert(err).Message()).To(ContainSubstring("after deletion has started"))
-			current, err := server.Get(ctx, privatev1.VolumesGetRequest_builder{Id: stale.GetId()}.Build())
-			Expect(err).ToNot(HaveOccurred())
-			Expect(current.GetObject().GetMetadata().HasDeletionTimestamp()).To(BeTrue())
-			Expect(current.GetObject().GetStatus().GetState()).ToNot(Equal(privatev1.VolumeState_VOLUME_STATE_AVAILABLE))
 		})
 
 		It("Rejects updates that change the provider", func() {

@@ -114,6 +114,29 @@ class DiskReadinessTests(unittest.TestCase):
                 env=environment, capture_output=True, text=True, timeout=120, check=False,
             )
 
+    def wait_for_bound_claim(self, name):
+        listing = self.core.list_namespaced_persistent_volume_claim(
+            self.namespace, field_selector=f"metadata.name={name}",
+        )
+        if listing.items[0].status.phase != "Bound":
+            watcher = watch.Watch()
+            events = watcher.stream(
+                self.core.list_namespaced_persistent_volume_claim, self.namespace,
+                field_selector=f"metadata.name={name}",
+                resource_version=listing.metadata.resource_version, timeout_seconds=45,
+            )
+            try:
+                for event in events:
+                    if event["object"].status.phase == "Bound":
+                        break
+            finally:
+                try:
+                    watcher.stop()
+                finally:
+                    events.close()
+        self.assertEqual(self.core.read_namespaced_persistent_volume_claim(
+            name, self.namespace).status.phase, "Bound")
+
     def test_deferred_then_ready_snapshot_and_annotation_removal(self):
         halted = self.run_readiness("Halted")
         self.assertEqual(halted.returncode, 0, halted.stdout + halted.stderr)
@@ -130,20 +153,7 @@ class DiskReadinessTests(unittest.TestCase):
                          "claimRef": {"namespace": self.namespace, "name": name}},
             })
             self.volumes.append(volume_name)
-            listing = self.core.list_namespaced_persistent_volume_claim(
-                self.namespace, field_selector=f"metadata.name={name}",
-            )
-            if listing.items[0].status.phase != "Bound":
-                with watch.Watch() as watcher:
-                    for event in watcher.stream(
-                        self.core.list_namespaced_persistent_volume_claim, self.namespace,
-                        field_selector=f"metadata.name={name}",
-                        resource_version=listing.metadata.resource_version, timeout_seconds=45,
-                    ):
-                        if event["object"].status.phase == "Bound":
-                            break
-            self.assertEqual(self.core.read_namespaced_persistent_volume_claim(
-                name, self.namespace).status.phase, "Bound")
+            self.wait_for_bound_claim(name)
             self.custom.patch_namespaced_custom_object_status(
                 "cdi.kubevirt.io", "v1beta1", self.namespace, "datavolumes", name,
                 {"status": {"phase": "Succeeded", "claimName": name}},

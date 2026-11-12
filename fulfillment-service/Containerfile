@@ -38,6 +38,10 @@ COPY --chown=1001:1001 proto/ proto/
 COPY --chown=1001:1001 fulfillment-service/ fulfillment-service/
 COPY --chown=1001:1001 bare-metal-fulfillment-operator/ bare-metal-fulfillment-operator/
 COPY --chown=1001:1001 osac-operator/api/ osac-operator/api/
+# For 0.4 only: ticket - OSAC-7670
+# CI disk readiness uses provisioning's config hash and its AAP dependency.
+COPY --chown=1001:1001 osac-operator/pkg/provisioning/ osac-operator/pkg/provisioning/
+COPY --chown=1001:1001 osac-operator/pkg/aap/ osac-operator/pkg/aap/
 
 WORKDIR /opt/app-root/src/fulfillment-service
 RUN --mount=type=cache,id=osac-go-pkg,target=/opt/app-root/src/go/pkg,uid=1001,gid=0 \

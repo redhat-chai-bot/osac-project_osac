@@ -68,32 +68,6 @@ identity E2E is [OSAC-6614](https://redhat.atlassian.net/browse/OSAC-6614).
   servers suite and the deployed public Create; provider provisioning remains
   E2E coverage.
 
-## ComputeInstance Disk Inventory: Temporary 0.4 Policy
-
-For 0.4 only: ticket - OSAC-7670
-
-New ComputeInstance disk inventory records start `AVAILABLE` when registration
-succeeds, with an initial transition timestamp and no failure message. This
-means only that inventory registration succeeded, **not** that a disk, PVC,
-import or VM is ready. ComputeInstance status remains the provisioning
-authority; even a failed ComputeInstance may have `AVAILABLE` inventory.
-
-Only the exact singleton topology
-`osac.io/node=osac-volume-registration-pending` identifies this lifecycle
-exception; it is not authorization. Tenant validation, metadata, registration
-idempotency and deletion/finalizer cleanup still apply. These inventory
-records bypass hub Volume CR creation and updates, so the supported new-disk
-path has no Volume CR feedback to observe. Standalone CSI volumes still start
-`CREATING` and become `AVAILABLE` through vendor provisioning and feedback.
-There is no migration, backfill or cleanup of previously created Volume CRs.
-
-Registration assigns no vendor Volume ID, vendor context or provisioned
-capacity. `AVAILABLE` alone does not make inventory billable: the default
-Volume capacity rule also requires `BLOCK` protocol and a vendor Volume ID,
-and uses provisioned GiB as its multiplier. API creation/readback tests use
-PostgreSQL; reconciler tests cover the no-hub bypass and cleanup. These tests
-do not claim physical storage readiness and need no AAP, CDI or KubeVirt.
-
 ## Coverage gaps
 
 - Provider-enabled networking and FabricDomain-to-Netris lifecycle need their
